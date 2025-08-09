@@ -49,7 +49,7 @@ app.post('/webhook', async (req, res) => {
             console.log(`[${senderNumber}] 🚀 Creando nueva sesión de chat...`);
             
             const createChatResponse = await axios.post(
-                'https://api.retellai.com/v2/create-chat',
+                'https://api.retellai.com/create-chat',
                 {
                     agent_id: RETELL_AGENT_ID
                 },
@@ -75,15 +75,10 @@ app.post('/webhook', async (req, res) => {
         console.log(`[${senderNumber}] 💬 Enviando mensaje a Retell AI...`);
         
         const chatCompletionResponse = await axios.post(
-            'https://api.retellai.com/v2/create-chat-completion',
+            'https://api.retellai.com/create-chat-completion',
             {
                 chat_id: chatId,
-                message_list: [
-                    {
-                        role: "user",
-                        content: messageContent
-                    }
-                ]
+                content: messageContent
             },
             {
                 headers: {
@@ -93,7 +88,9 @@ app.post('/webhook', async (req, res) => {
             }
         );
 
-        const responseMessage = chatCompletionResponse.data.response;
+        // La respuesta viene en el array messages, buscamos el último mensaje del agent
+        const messages = chatCompletionResponse.data.messages;
+        const responseMessage = messages[messages.length - 1]?.content || "Sin respuesta del agente";
         console.log(`🤖 Retell AI responde: "${responseMessage}"`);
 
         // ============================================

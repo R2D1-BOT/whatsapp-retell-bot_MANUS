@@ -99,11 +99,16 @@ app.post('/webhook', async (req, res) => {
         console.log(`[${senderNumber}] 📱 Enviando respuesta a WhatsApp...`);
         
         await axios.post(
-            `https://api.evoapicloud.com/message/sendText`,
+            `https://api.evoapicloud.com/message/sendText/f45cf2e8-1808-4379-a61c-88acd8e0625f`,
             {
-                apikey: EVO_API_KEY,
                 number: senderNumber,
                 text: responseMessage
+            },
+            {
+                headers: {
+                    'apikey': EVO_API_KEY,
+                    'Content-Type': 'application/json'
+                }
             }
         );
 

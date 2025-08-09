@@ -11,7 +11,7 @@ const EVO_URL = "https://api.evoapicloud.com";
 const EVO_ID = "756d5e00-dcf5-4e67-84de-29d71fd279a3";
 const EVO_TOKEN = "B4BBB16CEEA8-42A1-A6ED-04D81D9B42F1";
 const PORT = process.env.PORT || 8080;
-
+const chatSessions = {};
 app.post('/webhook', async (req, res) => {
   console.log("-> Webhook recibido!");
   try {

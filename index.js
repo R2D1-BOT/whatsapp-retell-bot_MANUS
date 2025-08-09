@@ -62,20 +62,29 @@ app.post('/webhook', async (req, res) => {
             throw new Error('Faltan credenciales de Retell AI');
         }
 
-        // CREAR CHAT EN RETELL AI (endpoint correcto)
-        console.log(`[${from}] Creando chat en Retell AI...`);
+        // PASO 1: CREAR SESIÓN DE CHAT EN RETELL AI
+        console.log(`[${from}] Creando sesión de chat en Retell AI...`);
         
-        const retellResponse = await axios.post('https://api.retellai.com/create-chat', {
-            agent_id: agentId,
-            retell_llm_dynamic_variables: {
-                customer_name: pushName,
-                whatsapp_number: from,
-                initial_message: text
-            },
-            metadata: {
-                whatsapp_number: from,
-                push_name: pushName,
-                platform: 'whatsapp'
+        const createChatResponse = await axios.post('https://api.retellai.com/create-chat', {
+            agent_id: agentId
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        const chatId = createChatResponse.data.chat_id;
+        console.log('✅ Sesión de chat creada:', chatId);
+
+        // PASO 2: GENERAR RESPUESTA DEL AGENTE
+        console.log(`[${from}] Generando respuesta del agente...`);
+        
+        const chatCompletionResponse = await axios.post('https://api.retellai.com/create-chat-completion', {
+            chat_id: chatId,
+            message: {
+                role: 'user',
+                content: text
             }
         }, {
             headers: {
@@ -84,11 +93,13 @@ app.post('/webhook', async (req, res) => {
             }
         });
 
-        console.log('✅ Chat creado en Retell AI:', retellResponse.data);
+        const agentResponse = chatCompletionResponse.data.messages.find(m => m.role === 'assistant');
+        const responseMessage = agentResponse ? agentResponse.content : `¡Hola ${pushName}! Soy tu asistente de WhatsApp.`;
+        
+        console.log(`[${from}] Respuesta del agente: "${responseMessage}"`);
 
         // RESPONDER A WHATSAPP (usando Evolution API)
         const phoneNumber = from.replace('@s.whatsapp.net', '');
-        const responseMessage = `¡Hola ${pushName}! He recibido tu mensaje: "${text}". Procesando con Retell AI...`;
         
         console.log(`[${from}] Enviando respuesta a WhatsApp...`);
         
@@ -108,7 +119,8 @@ app.post('/webhook', async (req, res) => {
         
         res.status(200).json({ 
             status: 'success',
-            chat_id: retellResponse.data.chat_id || 'unknown'
+            chat_id: chatId,
+            agent_response: responseMessage
         });
         
     } catch (error) {

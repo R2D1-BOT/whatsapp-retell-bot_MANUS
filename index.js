@@ -62,17 +62,19 @@ app.post('/webhook', async (req, res) => {
             throw new Error('Faltan credenciales de Retell AI');
         }
 
-        // CREAR LLAMADA EN RETELL AI (endpoint correcto)
-        console.log(`[${from}] Creando llamada en Retell AI...`);
+        // CREAR CHAT EN RETELL AI (endpoint correcto)
+        console.log(`[${from}] Creando chat en Retell AI...`);
         
-        const retellResponse = await axios.post('https://api.retellai.com/v2/create-phone-call', {
-            from_number: '+1234567890', // Número dummy para Retell
-            to_number: from.replace('@s.whatsapp.net', ''),
+        const retellResponse = await axios.post('https://api.retellai.com/create-chat', {
             agent_id: agentId,
+            retell_llm_dynamic_variables: {
+                customer_name: pushName,
+                whatsapp_number: from,
+                initial_message: text
+            },
             metadata: {
                 whatsapp_number: from,
                 push_name: pushName,
-                initial_message: text,
                 platform: 'whatsapp'
             }
         }, {
@@ -82,7 +84,7 @@ app.post('/webhook', async (req, res) => {
             }
         });
 
-        console.log('✅ Llamada creada en Retell AI:', retellResponse.data);
+        console.log('✅ Chat creado en Retell AI:', retellResponse.data);
 
         // RESPONDER A WHATSAPP (usando Evolution API)
         const phoneNumber = from.replace('@s.whatsapp.net', '');
@@ -106,7 +108,7 @@ app.post('/webhook', async (req, res) => {
         
         res.status(200).json({ 
             status: 'success',
-            call_id: retellResponse.data.call_id || 'unknown'
+            chat_id: retellResponse.data.chat_id || 'unknown'
         });
         
     } catch (error) {

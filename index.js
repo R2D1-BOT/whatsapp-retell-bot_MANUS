@@ -7,6 +7,7 @@ const PORT = process.env.PORT || 8080;
 app.use(express.json());
 
 console.log('🚀 Servidor del bot iniciado y escuchando en el puerto', PORT);
+console.log('📅 Versión 2.0 - Deploy forzado:', new Date().toISOString()); // ⭐ LÍNEA NUEVA
 
 // 🎯 ENDPOINT CORRECTO - RETELL AI BASE URL
 const RETELL_API_BASE = 'https://api.retellai.com/v2'; // ⭐ ESTA ERA LA URL QUE FALTABA

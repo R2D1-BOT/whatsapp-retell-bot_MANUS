@@ -1,4 +1,3 @@
-// QUITA ESTA LÍNEA: require('dotenv').config();
 const express = require('express');
 const axios = require('axios');
 
@@ -13,18 +12,12 @@ app.post('/webhook', async (req, res) => {
     try {
         console.log('-> Webhook recibido!', JSON.stringify(req.body, null, 2));
         
-      const { data } = req.body;
-const message = data.data?.message; // Doble .data
-const from = data.data?.key?.remoteJid;
-
-if (message?.messageType === 'conversation' && message?.conversation) {
-    const text = message.conversation;
-    console.log(`[${from}] dice: "${text}"`);
-    // ... resto del código
-}
+        // ESTRUCTURA CORRECTA SEGÚN EL LOG
+        const { data } = req.body;
+        const message = data.message;  // Directamente data.message
         
         if (message?.messageType === 'conversation' && message?.conversation) {
-            const from = message.key.remoteJid;
+            const from = data.key.remoteJid;  // Directamente data.key
             const text = message.conversation;
             
             console.log(`[${from}] dice: "${text}"`);

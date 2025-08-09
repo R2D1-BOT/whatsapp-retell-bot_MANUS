@@ -35,15 +35,29 @@ app.post('/webhook', async (req, res) => {
 
         console.log('🔑 API Key:', retellApiKey ? 'RECIBIDA' : 'FALTANTE');
         console.log('🤖 Agent ID:', retellAgentId ? 'RECIBIDO' : 'FALTANTE');
+        console.log('📱 EVO API Key:', evoApiKey ? 'RECIBIDA' : 'FALTANTE');
+        
+        // DEBUG: Mostrar primeros caracteres para verificar
+        console.log('🔍 DEBUG - Retell API Key (primeros 10):', retellApiKey?.substring(0, 10));
+        console.log('🔍 DEBUG - Agent ID (primeros 10):', retellAgentId?.substring(0, 10));
 
         if (!retellApiKey || !retellAgentId || !evoApiKey) {
+            console.log('❌ ERROR: Faltan variables de entorno');
+            console.log('- Retell API Key:', !!retellApiKey);
+            console.log('- Retell Agent ID:', !!retellAgentId);
+            console.log('- EVO API Key:', !!evoApiKey);
             throw new Error('Faltan variables de entorno requeridas');
         }
+
+        console.log('✅ Todas las variables están presentes, continuando...');
 
         // ============================================
         // 🔥 PASO 1: CREAR SESIÓN DE CHAT EN RETELL AI
         // ============================================
-        console.log(`[${from}] Creando sesión de chat en Retell AI...`);
+        console.log(`[${from}] 🚀 INICIANDO - Creando sesión de chat en Retell AI...`);
+        console.log(`🔗 URL: ${RETELL_API_BASE}/create-chat`);
+        console.log(`🤖 Agent ID: ${retellAgentId}`);
+        
         const createChatResponse = await axios.post(`${RETELL_API_BASE}/create-chat`, {
             agent_id: retellAgentId,
             metadata: {
@@ -57,6 +71,8 @@ app.post('/webhook', async (req, res) => {
                 'Content-Type': 'application/json'
             }
         });
+
+        console.log('🎉 RESPUESTA CREAR CHAT:', createChatResponse.data);
 
         const chatId = createChatResponse.data.chat_id;
         console.log(`✅ Sesión creada con ID: ${chatId}`);

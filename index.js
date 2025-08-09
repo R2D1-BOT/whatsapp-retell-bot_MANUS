@@ -105,7 +105,7 @@ app.get('/ping', (req, res) => {
 });
 
 const serverPort = PORT || 8080;
+// LA LÍNEA CAMBIADA PARA VERIFICAR EL DEPLOY
 app.listen(serverPort, '0.0.0.0', () => {
-  console.log(`🚀 Servidor del bot iniciado y escuchando en el puerto ${serverPort}`);
+  console.log(`🚀 v3.0 - DEBUG ACTIVADO - Servidor iniciado en puerto ${serverPort}`);
 });
-

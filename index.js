@@ -4,28 +4,23 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// NO NECESITAMOS LAS VARIABLES DE RETELL AQUÍ
+// Las variables de Evolution que SÍ necesitamos de Railway
 const { EVO_URL, EVO_ID, EVO_TOKEN, PORT } = process.env;
 const chatSessions = {};
 
 app.post('/webhook', async (req, res) => {
-  console.log("-> Webhook recibido! Leyendo claves desde los Headers...");
+  console.log("-> Webhook recibido! v7.0 FINAL");
 
-  // --- LEEMOS LAS CLAVES DE LAS CABECERAS DE LA PETICIÓN ---
+  // --- 1. LEEMOS LAS CLAVES DE RETELL DE LOS HEADERS ---
   const RETELL_AGENT_ID = req.headers['x-agent-id'];
   const authHeader = req.headers['authorization'];
-  const RETELL_API_KEY = authHeader && authHeader.split(' ')[1]; // Extrae la clave del "Bearer <key>"
-
-  // --- VERIFICAMOS QUE LAS CLAVES LLEGARON ---
-  console.log("--- VERIFICANDO CLAVES DE HEADERS ---");
-  console.log(`🔑 RETELL_API_KEY (de Header): ${RETELL_API_KEY ? 'RECIBIDA' : '!!! FALTANTE !!!'}`);
-  console.log(`🤖 RETELL_AGENT_ID (de Header): ${RETELL_AGENT_ID ? 'RECIBIDO' : '!!! FALTANTE !!!'}`);
-  console.log("------------------------------------");
+  const RETELL_API_KEY = authHeader && authHeader.split(' ')[1];
 
   if (!RETELL_API_KEY || !RETELL_AGENT_ID) {
-    console.error("!!! ERROR: No se recibieron las claves de Retell en las cabeceras del webhook.");
-    return res.status(400).send("Bad Request: Faltan cabeceras de autenticación de Retell.");
+    console.error("!!! ERROR: Faltan cabeceras de Retell en la llamada de Evolution.");
+    return res.status(400).send("Bad Request");
   }
+  console.log("--- Claves de Headers de Retell RECIBIDAS ---");
 
   try {
     const messageData = req.body.data;
@@ -38,33 +33,43 @@ app.post('/webhook', async (req, res) => {
     }
     console.log(`[${senderNumber}] dice: "${messageContent}"`);
 
-    let chatId = chatSessions[senderNumber];
-    
-    if (!chatId) {
-      console.log(`[${senderNumber}] Creando nueva sesión de chat...`);
-      const createChatResponse = await axios.post(
-        'https://api.retellai.com/create-chat',
-        { agent_id: RETELL_AGENT_ID },
-        { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' } }
-       );
-      
-      chatId = createChatResponse.data.chat_id;
-      chatSessions[senderNumber] = chatId;
-      console.log(`[${senderNumber}] Nueva sesión creada: ${chatId}`);
+    // --- 2. LÓGICA CORRECTA DE RETELL (UN SOLO POST) ---
+    const existingChatId = chatSessions[senderNumber];
+    // Usamos el formato de 'messages' que es el correcto
+    const retellPayload = {
+      agent_id: RETELL_AGENT_ID,
+      messages: [{ role: "user", content: messageContent }] 
+    };
+
+    if (existingChatId) {
+      retellPayload.chat_id = existingChatId;
     }
 
-    console.log(`[${senderNumber}] Enviando mensaje a chat ${chatId}...`);
-    const chatCompletionResponse = await axios.post(
+    // Hacemos la llamada al endpoint que SÍ existe
+    const retellResponse = await axios.post(
       'https://api.retellai.com/create-chat-completion',
-      {
-        chat_id: chatId,
-        messages: [{ role: "user", content: messageContent }]
-      },
+      retellPayload,
       { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' } }
      );
 
-    const botReply = chatCompletionResponse.data.messages[0].content;
+    const newChatId = retellResponse.data.chat_id;
+    if (newChatId && !existingChatId) {
+      chatSessions[senderNumber] = newChatId;
+    }
+
+    // Leemos la respuesta del array de messages
+    const botReply = retellResponse.data.messages.find(m => m.role === 'assistant')?.content;
+    if (!botReply) {
+        console.error("!!! ERROR: Retell no devolvió una respuesta de asistente.");
+        return res.status(500).send("Error en la respuesta de Retell");
+    }
     console.log(`[Retell AI] responde: "${botReply}"`);
+
+    // --- 3. ENVÍO DE RESPUESTA VÍA EVOLUTION (USANDO VARIABLES DE ENTORNO) ---
+    if (!EVO_URL || !EVO_ID || !EVO_TOKEN) {
+        console.error("!!! ERROR: Faltan las variables de entorno de Evolution (EVO_URL, EVO_ID, EVO_TOKEN).");
+        return res.status(500).send("Error de configuración del servidor");
+    }
 
     await axios.post(
       `${EVO_URL}/message/sendText/${EVO_ID}`,
@@ -76,25 +81,23 @@ app.post('/webhook', async (req, res) => {
       { headers: { 'apikey': EVO_TOKEN } }
     );
 
-    res.status(200).send("OK - Mensaje procesado");
+    console.log("<- Respuesta enviada a WhatsApp.");
+    res.status(200).send("OK");
+
   } catch (error) {
     const errorMessage = error.response ? JSON.stringify(error.response.data, null, 2) : error.message;
     console.error("!!! ERROR en el webhook:", errorMessage);
     if (error.config) {
-      console.error("--- Detalles de la Petición Fallida ---");
-      console.error("URL:", error.config.method.toUpperCase(), error.config.url);
+        console.error("--- Detalles de la Petición Fallida ---");
+        console.error("URL:", error.config.method.toUpperCase(), error.config.url);
     }
     res.status(500).send("Internal Server Error");
   }
 });
 
-app.get('/ping', (req, res) => {
-  res.status(200).send("Pong! El servidor del bot está activo y listo.");
-});
-
 const serverPort = PORT || 8080;
 app.listen(serverPort, '0.0.0.0', () => {
-  console.log(`🚀 v5.0 - LEYENDO HEADERS - Servidor iniciado en puerto ${serverPort}`);
+  console.log(`🚀 v7.0 FINAL - Servidor iniciado en puerto ${serverPort}`);
 });
 
 

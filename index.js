@@ -12,9 +12,9 @@ app.post('/webhook', async (req, res) => {
     try {
         console.log('-> Webhook recibido!', JSON.stringify(req.body, null, 2));
         
-        // ESTRUCTURA CORRECTA SEGÚN EL LOG
-        const { data } = req.body;
-        const message = data.message;  // Directamente data.message
+     const message = req.body.data.message;        // NO req.body.data
+const messageType = req.body.data.messageType; // NO message.messageType  
+const from = req.body.data.key.remoteJid;      // NO key.remoteJid
         
         if (message?.messageType === 'conversation' && message?.conversation) {
             const from = data.key.remoteJid;  // Directamente data.key

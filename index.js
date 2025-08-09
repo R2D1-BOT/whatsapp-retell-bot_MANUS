@@ -1,132 +1,136 @@
 const express = require('express');
 const axios = require('axios');
 
-require('dotenv').config(); // Cargar variables de entorno desde .env
-
 const app = express();
 app.use(express.json());
 
-// Variables de entorno
-const RETELL_API_KEY = process.env.RETELL_API_KEY;
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
-const EVO_TOKEN = process.env.EVO_TOKEN;
-const EVO_ID = process.env.EVO_ID;
-const EVO_URL = process.env.EVO_URL;
+// OPCIÓN 1: Si usas headers desde Evolution API
+const getRetellCredentials = (req) => {
+    const apiKey = req.headers['authorization']?.replace('Bearer ', '');
+    const agentId = req.headers['x-agent-id'];
+    
+    // Fallback a hardcoded si no vienen en headers
+    return {
+        apiKey: apiKey || 'key_45537c9b9dd8e7d97dae0c7a5e',
+        agentId: agentId || 'agent_f1ac3e5aff6ed5a42dd09a05bb'
+    };
+};
 
-// Almacenamiento temporal para sesiones de Retell AI (en un entorno de producción se usaría una base de datos)
-const retellSessions = {};
+// Evolution API config (hardcoded para que funcione)
+const EVO_CONFIG = {
+    url: 'https://api.evoapicloud.com',
+    token: 'B4BBB16CEEA8-42A1-A6ED-04D81D9B42F1',
+    instanceId: '756d5e00-dcf5-4e67-84de-29d71fd279a3'
+};
 
 app.post('/webhook', async (req, res) => {
     try {
         console.log('-> Webhook recibido!', JSON.stringify(req.body, null, 2));
         
-        const { data, instance, sender, server_url, apikey } = req.body;
+        const { data } = req.body;
 
-        // Validar que el webhook proviene de Evolution API y que contiene un mensaje
-        if (!data || !data.message || !data.key || !data.key.remoteJid) {
-            console.log('Webhook inválido: faltan datos esenciales.');
+        // Validaciones básicas
+        if (!data?.message || !data?.key?.remoteJid) {
+            console.log('❌ Webhook inválido: faltan datos esenciales');
             return res.status(400).json({ error: 'Webhook inválido' });
         }
 
         const message = data.message;
-        const from = data.key.remoteJid; // Número de WhatsApp del remitente
-        const pushName = data.pushName; // Nombre del remitente
+        const from = data.key.remoteJid;
+        const pushName = data.pushName || 'Usuario';
 
+        // Extraer texto del mensaje
         let text = '';
         if (message.conversation) {
             text = message.conversation;
-        } else if (message.extendedTextMessage && message.extendedTextMessage.text) {
+        } else if (message.extendedTextMessage?.text) {
             text = message.extendedTextMessage.text;
         } else {
-            console.log(`Mensaje de tipo no soportado o vacío de ${from}:`, message);
-            return res.status(200).json({ status: 'Mensaje no procesado: tipo no soportado o vacío' });
+            console.log(`⚠️ Tipo de mensaje no soportado de ${from}`);
+            return res.status(200).json({ status: 'Mensaje no procesado' });
         }
 
         console.log(`[${from} - ${pushName}] dice: "${text}"`);
 
-        // Verificar si ya existe una sesión de Retell AI para este número de WhatsApp
-        let retellChatId = retellSessions[from];
+        // Obtener credenciales de Retell AI
+        const { apiKey, agentId } = getRetellCredentials(req);
+        
+        console.log('🔑 API Key:', apiKey ? 'RECIBIDA' : 'FALTA');
+        console.log('🤖 Agent ID:', agentId ? 'RECIBIDO' : 'FALTA');
 
-        if (!retellChatId) {
-            console.log(`[${from}] Creando nueva sesión de chat en Retell AI...`);
-            const chatResponse = await axios.post('https://api.retellai.com/create-chat', {
-                agent_id: RETELL_AGENT_ID,
-                metadata: {
-                    whatsapp_number: from,
-                    push_name: pushName,
-                    initial_message: text
-                }
-            }, {
-                headers: {
-                    'Authorization': `Bearer ${RETELL_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            });
-            retellChatId = chatResponse.data.chat_id;
-            retellSessions[from] = retellChatId; // Guardar la sesión para futuras interacciones
-            console.log('✅ Sesión creada exitosamente:', chatResponse.data);
-        } else {
-            console.log(`[${from}] Usando sesión de chat existente en Retell AI: ${retellChatId}`);
+        if (!apiKey || !agentId) {
+            throw new Error('Faltan credenciales de Retell AI');
         }
 
-        // Enviar el mensaje del usuario a Retell AI
-        console.log(`[${from}] Enviando mensaje a Retell AI para el chat ${retellChatId}...`);
-        const retellResponse = await axios.post(`https://api.retellai.com/chat/${retellChatId}/message`, {
-            message: text
-        }, {
-            headers: {
-                'Authorization': `Bearer ${RETELL_API_KEY}`,
-                'Content-Type': 'application/json'
-            }
-        });
-
-        const retellReply = retellResponse.data.response;
-        console.log(`[${from}] Respuesta de Retell AI: "${retellReply}"`);
-
-        // Enviar la respuesta de Retell AI de vuelta a WhatsApp a través de Evolution API
-        console.log(`[${from}] Enviando respuesta a WhatsApp a través de Evolution API...`);
-        const evolutionApiUrl = `${EVO_URL}/message/sendText/${EVO_ID}`;
-        await axios.post(evolutionApiUrl, {
-            number: from.split('@')[0], // Extraer solo el número de teléfono
-            textMessage: {
-                text: retellReply
-            },
-            options: {
-                delay: 1200,
-                presence: 'composing',
-                linkPreview: false
-            }
-        }, {
-            headers: {
-                'apikey': EVO_TOKEN,
-                'Content-Type': 'application/json'
-            }
-        });
-        console.log('✅ Mensaje enviado a WhatsApp exitosamente.');
+        // CREAR LLAMADA EN RETELL AI (endpoint correcto)
+        console.log(`[${from}] Creando llamada en Retell AI...`);
         
-        res.status(200).json({ status: 'ok', retell_chat_id: retellChatId });
+        const retellResponse = await axios.post('https://api.retellai.com/v2/create-phone-call', {
+            from_number: '+1234567890', // Número dummy para Retell
+            to_number: from.replace('@s.whatsapp.net', ''),
+            agent_id: agentId,
+            metadata: {
+                whatsapp_number: from,
+                push_name: pushName,
+                initial_message: text,
+                platform: 'whatsapp'
+            }
+        }, {
+            headers: {
+                'Authorization': `Bearer ${apiKey}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log('✅ Llamada creada en Retell AI:', retellResponse.data);
+
+        // RESPONDER A WHATSAPP (usando Evolution API)
+        const phoneNumber = from.replace('@s.whatsapp.net', '');
+        const responseMessage = `¡Hola ${pushName}! He recibido tu mensaje: "${text}". Procesando con Retell AI...`;
+        
+        console.log(`[${from}] Enviando respuesta a WhatsApp...`);
+        
+        await axios.post(`${EVO_CONFIG.url}/message/sendText/${EVO_CONFIG.instanceId}`, {
+            number: phoneNumber,
+            textMessage: {
+                text: responseMessage
+            }
+        }, {
+            headers: {
+                'apikey': EVO_CONFIG.token,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log('✅ Respuesta enviada a WhatsApp');
+        
+        res.status(200).json({ 
+            status: 'success',
+            call_id: retellResponse.data.call_id || 'unknown'
+        });
         
     } catch (error) {
         console.log('!!! ERROR en el webhook:', error.response?.data || error.message);
-        console.log('--- Detalles de la Petición Fallida ---');
+        console.log('--- Detalles del Error ---');
         if (error.config) {
-            console.log('URL:', error.config.method.toUpperCase(), error.config.url);
+            console.log('URL:', error.config.method?.toUpperCase(), error.config.url);
             console.log('Headers:', JSON.stringify(error.config.headers, null, 2));
             console.log('Data:', error.config.data);
         }
-        console.log('------------------------------------');
-        res.status(500).json({ error: 'Error interno en el servidor' });
+        console.log('-------------------------');
+        res.status(500).json({ error: 'Error interno del servidor' });
     }
+});
+
+// Health check endpoint
+app.get('/', (req, res) => {
+    res.json({ 
+        status: 'Bot funcionando', 
+        timestamp: new Date().toISOString() 
+    });
 });
 
 const PORT = process.env.PORT || 8080;
 app.listen(PORT, () => {
     console.log(`🚀 Servidor del bot iniciado y escuchando en el puerto ${PORT}`);
 });
-
-
-
-
-
-
-

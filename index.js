@@ -5,7 +5,12 @@ require('dotenv').config();
 const app = express();
 app.use(express.json());
 
-const { RETELL_API_KEY, RETELL_AGENT_ID, EVO_URL, EVO_ID, EVO_TOKEN, PORT } = process.env;
+const RETELL_API_KEY = "key_69ff78a84a56c5dd3ea71be37b6f";
+const RETELL_AGENT_ID = "agent_0452f6bca77b7fd955d6316299";
+const EVO_URL = "https://api.evoapicloud.com";
+const EVO_ID = "756d5e00-dcf5-4e67-84de-29d71fd279a3";
+const EVO_TOKEN = "B4BBB16CEEA8-42A1-A6ED-04D81D9B42F1";
+const PORT = process.env.PORT || 8080;
 const chatSessions = {};
 
 app.post('/webhook', async (req, res) => {

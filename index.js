@@ -9,6 +9,14 @@ const EVO_API_KEY = process.env.EVO_TOKEN;
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
 const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
 
+// 🔍 DEBUG - Mostrar TODAS las variables de entorno
+console.log("🔍 DEBUG - Variables disponibles:");
+console.log("- PORT:", process.env.PORT);
+console.log("- EVO_TOKEN (primeros 10):", process.env.EVO_TOKEN?.substring(0, 10));
+console.log("- RETELL_API_KEY (primeros 10):", process.env.RETELL_API_KEY?.substring(0, 10));
+console.log("- RETELL_AGENT_ID (primeros 10):", process.env.RETELL_AGENT_ID?.substring(0, 10));
+console.log("- Todas las env keys:", Object.keys(process.env).filter(key => key.includes('EVO') || key.includes('RETELL')));
+
 const chatSessions = {};
 
 app.post('/webhook', async (req, res) => {

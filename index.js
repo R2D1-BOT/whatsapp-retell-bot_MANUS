@@ -1,6 +1,6 @@
 const express = require('express');
 const axios = require('axios');
-require('dotenv').config();
+// LA PUTA LÍNEA DE DOTENV HA SIDO BORRADA
 
 const app = express();
 app.use(express.json());
@@ -9,7 +9,6 @@ const { RETELL_API_KEY, RETELL_AGENT_ID, EVO_URL, EVO_ID, EVO_TOKEN, PORT } = pr
 const chatSessions = {};
 
 app.post('/webhook', async (req, res) => {
-  // --- LÍNEAS DE DEBUG PARA VER LAS CLAVES ---
   console.log("--- VERIFICANDO VARIABLES DE ENTORNO ---");
   console.log(`🔑 RETELL_API_KEY: ${RETELL_API_KEY ? 'RECIBIDA' : '!!! FALTANTE !!!'}`);
   console.log(`🤖 RETELL_AGENT_ID: ${RETELL_AGENT_ID ? 'RECIBIDO' : '!!! FALTANTE !!!'}`);
@@ -105,7 +104,7 @@ app.get('/ping', (req, res) => {
 });
 
 const serverPort = PORT || 8080;
-// LA LÍNEA CAMBIADA PARA VERIFICAR EL DEPLOY
 app.listen(serverPort, '0.0.0.0', () => {
-  console.log(`🚀 v3.0 - DEBUG ACTIVADO - Servidor iniciado en puerto ${serverPort}`);
+  console.log(`🚀 v4.0 - DOTENV ELIMINADO - Servidor iniciado en puerto ${serverPort}`);
 });
+

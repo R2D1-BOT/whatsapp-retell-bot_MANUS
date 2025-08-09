@@ -20,11 +20,8 @@ const {
 // Almacenamiento de sesiones en memoria.
 const chatSessions = {};
 
-// URL base de la API de Retell
-const RETELL_API_BASE_URL = 'https://api.retellai.com/v1';
-
 // 4. ENDPOINT PRINCIPAL: EL WEBHOOK
-app.post('/webhook', async (req, res ) => {
+app.post('/webhook', async (req, res) => {
   console.log("-> Webhook recibido!");
 
   try {
@@ -42,17 +39,11 @@ app.post('/webhook', async (req, res ) => {
 
     let retellChatId = chatSessions[senderNumber];
 
-    // La lógica de creación de chat parece ser la que falla.
-    // Vamos a verificar la documentación de Retell para el endpoint correcto.
-    // El endpoint correcto para crear un chat es POST /chat
-    // Y para enviar un mensaje es POST /chat/{chat_id}/completion
-    // Vamos a ajustar el código a esta estructura.
-
     if (!retellChatId) {
       console.log(`Creando nuevo chat en Retell para [${senderNumber}]...`);
-      // CORRECCIÓN: El endpoint correcto es /chat y se le pasa el agent_id en el cuerpo.
+      // ESTA ES LA LLAMADA CORRECTA Y ORIGINAL
       const createChatResponse = await axios.post(
-        `${RETELL_API_BASE_URL}/chat`, // Endpoint corregido
+        'https://api.retellai.com/create-chat',
         { agent_id: RETELL_AGENT_ID },
         { 
           headers: { 
@@ -60,20 +51,18 @@ app.post('/webhook', async (req, res ) => {
             'Content-Type': 'application/json'
           } 
         }
-      );
+       );
       retellChatId = createChatResponse.data.chat_id;
       chatSessions[senderNumber] = retellChatId;
       console.log(`Nuevo chat creado. ID: ${retellChatId}`);
     }
 
     console.log(`Enviando mensaje a Retell (Chat ID: ${retellChatId})...`);
-    // CORRECCIÓN: El endpoint para enviar mensajes es /chat/{chat_id}/completion
     const retellResponse = await axios.post(
-      `${RETELL_API_BASE_URL}/chat/${retellChatId}/completion`, // Endpoint corregido
+      'https://api.retellai.com/create-chat-completion',
       {
-        completion_request: {
-          text: messageContent
-        }
+        chat_id: retellChatId,
+        content: messageContent
       },
       { 
         headers: { 
@@ -81,7 +70,7 @@ app.post('/webhook', async (req, res ) => {
           'Content-Type': 'application/json'
         } 
       }
-    );
+     );
 
     const botReply = retellResponse.data.content;
     console.log(`[Retell AI] responde: "${botReply}"`);
@@ -101,11 +90,13 @@ app.post('/webhook', async (req, res ) => {
     res.status(200).send("OK - Mensaje procesado");
 
   } catch (error) {
-    const errorMessage = error.response ? JSON.stringify(error.response.data) : error.message;
+    // LOGGING DE ERRORES MEJORADO
+    const errorMessage = error.response ? JSON.stringify(error.response.data, null, 2) : error.message;
     console.error("!!! ERROR en el webhook:", errorMessage);
-    // Imprimir detalles del error para una mejor depuración
     if (error.config) {
-      console.error("Error en la petición a:", error.config.method.toUpperCase(), error.config.url);
+      console.error("--- Detalles de la Petición Fallida ---");
+      console.error("URL:", error.config.method.toUpperCase(), error.config.url);
+      console.error("------------------------------------");
     }
     res.status(500).send("Internal Server Error");
   }

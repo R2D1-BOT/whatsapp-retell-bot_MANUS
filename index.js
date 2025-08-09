@@ -4,100 +4,64 @@ const axios = require('axios');
 const app = express();
 app.use(express.json());
 
-// Las variables de Evolution que SÍ necesitamos de Railway
-const { EVO_URL, EVO_ID, EVO_TOKEN, PORT } = process.env;
+// ✅ USAR VARIABLES DE ENTORNO CORRECTAS (las que tienes en Railway)
+const PORT = process.env.PORT || 8080;
+const EVO_API_KEY = process.env.EVO_TOKEN; // ✅ La que tienes en Railway
+const RETELL_API_KEY = process.env.RETELL_API_KEY; // ✅ 
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // ✅
+
 const chatSessions = {};
 
 app.post('/webhook', async (req, res) => {
-  console.log("-> Webhook recibido! v7.0 FINAL");
+    console.log("-> Webhook recibido! v8.0 CORREGIDO");
+    
+    try {
+        const messageData = req.body.data;
+        const eventType = req.body.event;
+        const senderNumber = messageData?.key?.remoteJid;
+        const messageContent = messageData?.message?.conversation || messageData?.message?.extendedTextMessage?.text;
 
-  // --- 1. LEEMOS LAS CLAVES DE RETELL DE LOS HEADERS ---
-  const RETELL_AGENT_ID = req.headers['x-agent-id'];
-  const authHeader = req.headers['authorization'];
-  const RETELL_API_KEY = authHeader && authHeader.split(' ')[1];
+        if (eventType !== 'messages.upsert' || !senderNumber || !messageContent) {
+            return res.status(200).send("OK - Evento no procesable");
+        }
 
-  if (!RETELL_API_KEY || !RETELL_AGENT_ID) {
-    console.error("!!! ERROR: Faltan cabeceras de Retell en la llamada de Evolution.");
-    return res.status(400).send("Bad Request");
-  }
-  console.log("--- Claves de Headers de Retell RECIBIDAS ---");
+        console.log(`[${senderNumber}] dice: "${messageContent}"`);
 
-  try {
-    const messageData = req.body.data;
-    const eventType = req.body.event;
-    const senderNumber = messageData?.key?.remoteJid;
-    const messageContent = messageData?.message?.conversation || messageData?.message?.extendedTextMessage?.text;
+        // ✅ VERIFICAR VARIABLES
+        if (!RETELL_API_KEY || !RETELL_AGENT_ID || !EVO_API_KEY) {
+            console.error("❌ ERROR: Faltan variables de entorno");
+            console.error("- RETELL_API_KEY:", !!RETELL_API_KEY);
+            console.error("- RETELL_AGENT_ID:", !!RETELL_AGENT_ID); 
+            console.error("- EVO_API_KEY:", !!EVO_API_KEY);
+            return res.status(500).send("Error de configuración");
+        }
 
-    if (eventType !== 'messages.upsert' || !senderNumber || !messageContent) {
-      return res.status(200).send("OK - Evento no procesable");
-    }
-    console.log(`[${senderNumber}] dice: "${messageContent}"`);
+        console.log("✅ Todas las variables presentes");
 
-    // --- 2. LÓGICA CORRECTA DE RETELL (UN SOLO POST) ---
-    const existingChatId = chatSessions[senderNumber];
-    // Usamos el formato de 'messages' que es el correcto
-    const retellPayload = {
-      agent_id: RETELL_AGENT_ID,
-      messages: [{ role: "user", content: messageContent }] 
-    };
+        // ============================================
+        // 🔥 PASO 1: CREAR SESIÓN DE CHAT (SI NO EXISTE)
+        // ============================================
+        let chatId = chatSessions[senderNumber];
+        
+        if (!chatId) {
+            console.log(`🚀 Creando nueva sesión para ${senderNumber}...`);
+            
+            const createChatResponse = await axios.post(
+                'https://api.retellai.com/v2/create-chat', // ✅ CON /v2
+                {
+                    agent_id: RETELL_AGENT_ID,
+                    metadata: {
+                        user_phone: senderNumber,
+                        source: 'whatsapp'
+                    }
+                },
+                {
+                    headers: {
+                        'Authorization': `Bearer ${RETELL_API_KEY}`,
+                        'Content-Type': 'application/json'
+                    }
+                }
+            );
 
-    if (existingChatId) {
-      retellPayload.chat_id = existingChatId;
-    }
-
-    // Hacemos la llamada al endpoint que SÍ existe
-    const retellResponse = await axios.post(
-      'https://api.retellai.com/create-chat-completion',
-      retellPayload,
-      { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' } }
-     );
-
-    const newChatId = retellResponse.data.chat_id;
-    if (newChatId && !existingChatId) {
-      chatSessions[senderNumber] = newChatId;
-    }
-
-    // Leemos la respuesta del array de messages
-    const botReply = retellResponse.data.messages.find(m => m.role === 'assistant')?.content;
-    if (!botReply) {
-        console.error("!!! ERROR: Retell no devolvió una respuesta de asistente.");
-        return res.status(500).send("Error en la respuesta de Retell");
-    }
-    console.log(`[Retell AI] responde: "${botReply}"`);
-
-    // --- 3. ENVÍO DE RESPUESTA VÍA EVOLUTION (USANDO VARIABLES DE ENTORNO) ---
-    if (!EVO_URL || !EVO_ID || !EVO_TOKEN) {
-        console.error("!!! ERROR: Faltan las variables de entorno de Evolution (EVO_URL, EVO_ID, EVO_TOKEN).");
-        return res.status(500).send("Error de configuración del servidor");
-    }
-
-    await axios.post(
-      `${EVO_URL}/message/sendText/${EVO_ID}`,
-      {
-        number: senderNumber,
-        options: { delay: 1200, presence: "composing" },
-        textMessage: { text: botReply }
-      },
-      { headers: { 'apikey': EVO_TOKEN } }
-    );
-
-    console.log("<- Respuesta enviada a WhatsApp.");
-    res.status(200).send("OK");
-
-  } catch (error) {
-    const errorMessage = error.response ? JSON.stringify(error.response.data, null, 2) : error.message;
-    console.error("!!! ERROR en el webhook:", errorMessage);
-    if (error.config) {
-        console.error("--- Detalles de la Petición Fallida ---");
-        console.error("URL:", error.config.method.toUpperCase(), error.config.url);
-    }
-    res.status(500).send("Internal Server Error");
-  }
-});
-
-const serverPort = PORT || 8080;
-app.listen(serverPort, '0.0.0.0', () => {
-  console.log(`🚀 v7.0 FINAL - Servidor iniciado en puerto ${serverPort}`);
-});
-
+            chatId = createChatResponse.data.chat_id;
 

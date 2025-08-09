@@ -37,33 +37,29 @@ app.post('/webhook', async (req, res) => {
 
     console.log(`[${senderNumber}] dice: "${messageContent}"`);
 
-    let retellChatId = chatSessions[senderNumber];
+    // --- LÓGICA CORRECTA DE RETELL AI ---
+    
+    // Obtenemos el ID de chat si ya existe para este número
+    const existingChatId = chatSessions[senderNumber];
 
-    if (!retellChatId) {
-      console.log(`Creando nuevo chat en Retell para [${senderNumber}]...`);
-      // ESTA ES LA LLAMADA CORRECTA Y ORIGINAL
-      const createChatResponse = await axios.post(
-        'https://api.retellai.com/create-chat',
-        { agent_id: RETELL_AGENT_ID },
-        { 
-          headers: { 
-            'Authorization': `Bearer ${RETELL_API_KEY}`,
-            'Content-Type': 'application/json'
-          } 
-        }
-       );
-      retellChatId = createChatResponse.data.chat_id;
-      chatSessions[senderNumber] = retellChatId;
-      console.log(`Nuevo chat creado. ID: ${retellChatId}`);
+    // Construimos el cuerpo de la petición a Retell
+    const retellPayload = {
+      agent_id: RETELL_AGENT_ID,
+      content: messageContent
+    };
+
+    // Si ya tenemos un chat, lo añadimos al payload para continuar la conversación
+    if (existingChatId) {
+      retellPayload.chat_id = existingChatId;
+      console.log(`Continuando chat para [${senderNumber}] con ID: ${existingChatId}`);
+    } else {
+      console.log(`Iniciando nuevo chat para [${senderNumber}]...`);
     }
 
-    console.log(`Enviando mensaje a Retell (Chat ID: ${retellChatId})...`);
+    // Hacemos UNA SOLA LLAMADA al endpoint correcto
     const retellResponse = await axios.post(
       'https://api.retellai.com/create-chat-completion',
-      {
-        chat_id: retellChatId,
-        content: messageContent
-      },
+      retellPayload,
       { 
         headers: { 
           'Authorization': `Bearer ${RETELL_API_KEY}`,
@@ -72,9 +68,17 @@ app.post('/webhook', async (req, res) => {
       }
      );
 
+    // Guardamos el ID del chat para futuras conversaciones
+    const newChatId = retellResponse.data.chat_id;
+    if (newChatId && !existingChatId) {
+      chatSessions[senderNumber] = newChatId;
+      console.log(`Nuevo chat guardado con ID: ${newChatId}`);
+    }
+
     const botReply = retellResponse.data.content;
     console.log(`[Retell AI] responde: "${botReply}"`);
 
+    // --- ENVÍO DE RESPUESTA VÍA EVOLUTION API ---
     console.log(`Enviando respuesta a [${senderNumber}] vía Evolution API...`);
     await axios.post(
       `${EVO_URL}/message/sendText/${EVO_ID}`,
@@ -90,7 +94,6 @@ app.post('/webhook', async (req, res) => {
     res.status(200).send("OK - Mensaje procesado");
 
   } catch (error) {
-    // LOGGING DE ERRORES MEJORADO
     const errorMessage = error.response ? JSON.stringify(error.response.data, null, 2) : error.message;
     console.error("!!! ERROR en el webhook:", errorMessage);
     if (error.config) {

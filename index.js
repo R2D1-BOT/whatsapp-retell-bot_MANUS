@@ -137,8 +137,9 @@ app.get('/health', (req, res) => {
 app.post('/cleanup', (req, res) => { /* ...código sin cambios... */ });
 
 // --- INICIAR SERVIDOR ---
-const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ [DIAG] Servidor escuchando en puerto ${PORT}`);
+// Railway nos da el puerto a través de la variable de entorno process.env.PORT
+const server = app.listen(PORT, () => {
+    console.log(`✅ [DIAG] Servidor escuchando en el puerto ${PORT} asignado por la plataforma.`);
 });
 
 // =======================================================================

@@ -1,10 +1,10 @@
 {
   "name": "whatsapp-retell-bot",
   "version": "1.0.0",
-  "description": "Bot de WhatsApp con Retell AI",
+  "description": "",
   "main": "index.js",
   "scripts": {
-    "start": "node --optimize_for_size --max_old_space_size=256 index.js"
+    "start": "node index.js"
   },
   "dependencies": {
     "axios": "^1.7.2",

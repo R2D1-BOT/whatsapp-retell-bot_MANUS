@@ -46,10 +46,19 @@ app.post("/webhook", async (req, res) => {
 
     // Enviar mensaje a Retell
     const response = await axios.post(
-      `https://api.retellai.com/v2/sendMessage/${chatId}`,
-      { message: text },
-      { headers: { Authorization: `Bearer ${RETELL_API_KEY}` } }
-    );
+  "https://api.retellai.com/v2/chat/completions",
+  {
+    agent_id: process.env.RETELL_AGENT_ID,
+    messages: [{ role: "user", content: message }],
+  },
+  {
+    headers: {
+      Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
+      "Content-Type": "application/json"
+    },
+  }
+);
+
 
     const reply = response.data.reply || "🤖 (sin respuesta de Retell)";
     console.log(`🤖 Retell responde: "${reply}"`);

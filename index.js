@@ -17,7 +17,7 @@ app.post('/webhook', async (req, res) => {
         console.log('-> Webhook principal [/webhook] recibido!');
         console.log('DATOS WEBHOOK:', JSON.stringify(req.body, null, 2));
         
-        const messageData = req.body;
+        const messageData = req.body.data || req.body;
         
         // Extraer número de teléfono de múltiples formatos posibles
         const senderNumber = messageData?.key?.remoteJid || 
@@ -33,6 +33,9 @@ app.post('/webhook', async (req, res) => {
                            messageData?.body ||
                            messageData?.content ||
                            '';
+
+        console.log('DEBUG - messageData.message:', messageData?.message);
+        console.log('DEBUG - messageText extraído:', messageText);
 
         if (!senderNumber) {
             console.error('!!! ERROR: No se pudo extraer el número de teléfono');
@@ -164,6 +167,12 @@ process.on('SIGTERM', () => {
         console.log('Servidor cerrado correctamente');
         process.exit(0);
     });
+});
+
+// Iniciar servidor - BINDING CRÍTICO para Railway
+const server = app.listen(PORT, '0.0.0.0', () => {
+    console.log(`🚀 SERVIDOR INICIADO`);
+    console.log(`✅ Servidor escuchando en el puerto ${PORT}. Vinculado a 0.0.0.0 para Railway.`);
 });
 
 // Iniciar servidor - BINDING CRÍTICO para Railway

@@ -6,12 +6,20 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// 🔑 VARIABLES DESDE RAILWAY (no hardcodear nunca en producción)
+// 🔑 VARIABLES DESDE RAILWAY
 const EVO_API_KEY = process.env.EVOLUTION_API_KEY;
 const EVO_INSTANCE_ID = process.env.EVOLUTION_INSTANCE;
-const EVO_BASE_URL = process.env.EVOLUTION_API_URL || "https://api.evoapicloud.com";
+const EVO_BASE_URL = process.env.EVOLUTION_API_URL;  // nunca va a ser undefined porque ya está en Railway
 const RETELL_API_KEY = process.env.RETELL_API_KEY;  
 const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
+
+// Debug para verificar
+console.log("🔧 DEBUG VARIABLES:");
+console.log("EVO_API_KEY:", EVO_API_KEY ? EVO_API_KEY.substring(0,8)+"..." : "undefined");
+console.log("EVO_BASE_URL:", EVO_BASE_URL);
+console.log("EVO_INSTANCE_ID:", EVO_INSTANCE_ID);
+console.log("RETELL_AGENT_ID:", RETELL_AGENT_ID);
+
 
 // 📂 URL DEL PDF
 const MENU_PDF_URL = "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf";

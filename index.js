@@ -6,101 +6,64 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Variables de entorno
-const EVO_URL = process.env.EVO_URL;
-const EVO_ID = process.env.EVO_ID;
-const EVO_API_KEY = process.env.EVO_API_KEY;
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
-const RETELL_API_KEY = process.env.RETELL_API_KEY;
+// 🔑 Claves (ponlas en variables de entorno en Render)
+const EVO_API_KEY = process.env.EVO_API_KEY; // Evolution API
+const RETELL_API_KEY = process.env.RETELL_API_KEY; // Retell AI
+const EVO_INSTANCE = process.env.EVO_INSTANCE; // ID de instancia Evolution
 
-// Sesiones por número de WhatsApp
-const sessions = {};
-
+// 📌 Webhook de Evolution API (WhatsApp)
 app.post("/webhook", async (req, res) => {
   try {
-    const msg = req.body;
-    const from = msg?.data?.key?.remoteJid; // número en WhatsApp
-    const text = msg?.data?.message?.conversation || msg?.data?.message?.extendedTextMessage?.text;
+    const message = req.body;
+    const from = message.key.remoteJid;
+    const text = message.message?.conversation || message.message?.extendedTextMessage?.text;
 
     console.log(`[${from}] dice: "${text}"`);
 
-    if (!from || !text) return res.sendStatus(200);
-
-    // Si no hay sesión activa, creamos nueva
-    if (!sessions[from] || sessions[from].ended) {
+    // 👉 Solo crear sesión si llega un mensaje de texto
+    if (text) {
       console.log(`🚀 Creando nueva sesión en Retell para ${from}`);
 
-      const chat = await axios.post(
-        "https://api.retellai.com/v2/createChat",
-        { agent_id: RETELL_AGENT_ID },
-        { headers: { Authorization: `Bearer ${RETELL_API_KEY}` } }
+      const response = await axios.post(
+        "https://api.retellai.com/v2/sessions", // endpoint correcto
+        {
+          agent_id: "agent_0452f6bca77b7fd955d6316299", // ⚡️ tu Agent ID real
+          metadata: { user: from }
+        },
+        {
+          headers: {
+            "Authorization": `Bearer ${RETELL_API_KEY}`,
+            "Content-Type": "application/json"
+          }
+        }
       );
 
-      sessions[from] = {
-        chatId: chat.data.chat_id,
-        ended: false,
-      };
+      console.log("✅ Sesión creada en Retell:", response.data);
+
+      // Enviar mensaje a WhatsApp confirmando
+      await axios.post(
+        `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE}`,
+        {
+          number: from.replace("@s.whatsapp.net", ""),
+          text: "Tu sesión con ClaraBot ha sido creada 🚀"
+        },
+        {
+          headers: {
+            "apikey": EVO_API_KEY,
+            "Content-Type": "application/json"
+          }
+        }
+      );
     }
 
-    const chatId = sessions[from].chatId;
-
-    // Enviar mensaje a Retell
- const response = await axios.post(
-  "https://api.retellai.com/v2/chat/completions",
-  {
-    agent_id: process.env.RETELL_AGENT_ID,
-    messages: [{ role: "user", content: message }],
-  },
-  {
-    headers: {
-      Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-  }
-);
-  {
-    headers: {
-      Authorization: `Bearer ${process.env.RETELL_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-  }
-);
-
-
-    const reply = response.data.reply || "🤖 (sin respuesta de Retell)";
-    console.log(`🤖 Retell responde: "${reply}"`);
-
-    // Enviar respuesta por Evolution
-    await axios.post(
-      `${EVO_URL}/message/sendText/${EVO_ID}`,
-      {
-        number: from.replace("@s.whatsapp.net", ""),
-        textMessage: { text: reply },
-      },
-      {
-        headers: {
-          "Content-Type": "application/json",
-          apikey: EVO_API_KEY,
-        },
-      }
-    );
-
+    res.sendStatus(200);
   } catch (error) {
     console.error("!!! ERROR en el webhook [/webhook]:", error.response?.data || error.message);
-
-    // 🔄 Manejo: si Retell devuelve "Chat already ended", reseteamos la sesión
-    if (error.response?.data?.message === "Chat already ended") {
-      const from = req.body?.data?.key?.remoteJid;
-      if (from) {
-        sessions[from].ended = true;
-        console.log(`⚠️ Sesión cerrada para ${from}, se creará nueva en el próximo mensaje`);
-      }
-    }
+    res.sendStatus(500);
   }
-
-  res.sendStatus(200);
 });
 
+// 🚀 Arranque
 app.listen(PORT, () => {
   console.log(`✅ Servidor escuchando en puerto ${PORT}`);
 });

@@ -15,11 +15,34 @@ app.get('/', (req, res) => {
 app.post('/webhook', async (req, res) => {
     try {
         console.log('-> Webhook principal [/webhook] recibido!');
+        console.log('DATOS WEBHOOK:', JSON.stringify(req.body, null, 2));
         
         const messageData = req.body;
-        const senderNumber = messageData.key.remoteJid;
-        const messageText = messageData.message.conversation || 
-                           messageData.message.extendedTextMessage?.text || '';
+        
+        // Extraer número de teléfono de múltiples formatos posibles
+        const senderNumber = messageData?.key?.remoteJid || 
+                            messageData?.from || 
+                            messageData?.sender ||
+                            messageData?.phone ||
+                            messageData?.number;
+        
+        // Extraer texto del mensaje de múltiples formatos posibles  
+        const messageText = messageData?.message?.conversation || 
+                           messageData?.message?.extendedTextMessage?.text ||
+                           messageData?.text ||
+                           messageData?.body ||
+                           messageData?.content ||
+                           '';
+
+        if (!senderNumber) {
+            console.error('!!! ERROR: No se pudo extraer el número de teléfono');
+            return res.status(400).json({ error: 'No phone number found' });
+        }
+
+        if (!messageText) {
+            console.error('!!! ERROR: No se pudo extraer el texto del mensaje');
+            return res.status(400).json({ error: 'No message text found' });
+        }
 
         console.log(`[${senderNumber}] dice: "${messageText}"`);
         console.log(`[${senderNumber}] 💬 Enviando mensaje a Retell AI...`);

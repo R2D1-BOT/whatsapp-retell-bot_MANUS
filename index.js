@@ -5,46 +5,41 @@ const axios = require("axios");
 const app = express();
 app.use(express.json());
 
-// 🚨 Variables de entorno
 const PORT = process.env.PORT || 8080;
-const EVO_API_KEY = process.env.EVOLUTION_API_KEY;
-const EVO_URL = process.env.EVOLUTION_API_URL;
-const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE;
-const RETELL_API_KEY = process.env.RETELL_API_KEY;
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
+const EVO_API_KEY = process.env.EVOLUTION_API_KEY || "MISSING";
+const EVO_URL = process.env.EVOLUTION_API_URL || "MISSING";
+const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE || "MISSING";
+const RETELL_API_KEY = process.env.RETELL_API_KEY || "MISSING";
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID || "MISSING";
 
-// 🔧 Debug seguro
-console.log("====================================");
-console.log("🚀 Servidor iniciando con config:");
-console.log("PORT:", PORT);
-console.log("EVO_API_KEY:", EVO_API_KEY ? "✅ CARGADA" : "❌ MISSING");
-console.log("EVO_URL:", EVO_URL ? EVO_URL : "❌ MISSING");
-console.log("EVO_INSTANCE:", EVO_INSTANCE ? EVO_INSTANCE : "❌ MISSING");
-console.log("RETELL_API_KEY:", RETELL_API_KEY ? "✅ CARGADA" : "❌ MISSING");
-console.log("RETELL_AGENT_ID:", RETELL_AGENT_ID ? "✅ CARGADA" : "❌ MISSING");
-console.log("====================================");
-
-// URL del PDF del menú
 const MENU_PDF_URL = "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf";
 
-// ✅ Endpoint raíz para Railway
-app.get("/", (req, res) => res.status(200).send("✅ WhatsApp-Retell Bot corriendo"));
+// Debug seguro: muestra si están cargadas
+console.log("🚀 Servidor iniciando:");
+console.log("PORT:", PORT);
+console.log("EVO_API_KEY:", EVO_API_KEY !== "MISSING");
+console.log("EVO_URL:", EVO_URL !== "MISSING");
+console.log("EVO_INSTANCE:", EVO_INSTANCE !== "MISSING");
+console.log("RETELL_API_KEY:", RETELL_API_KEY !== "MISSING");
+console.log("RETELL_AGENT_ID:", RETELL_AGENT_ID !== "MISSING");
 
-// ✅ Healthcheck interno
+// Endpoint raíz para Railway
+app.get("/", (req, res) => res.status(200).send("✅ Bot corriendo"));
+
+// Healthcheck interno
 app.get("/health", (req, res) => {
   res.status(200).json({ status: "ok", timestamp: Date.now() });
 });
 
-// ✅ Webhook principal: Evolution → Retell → Evolution
+// Webhook principal
 app.post("/webhook", async (req, res) => {
   try {
     const data = req.body;
     const from = data?.data?.key?.remoteJid;
     const text = data?.data?.message?.conversation;
-
     if (!from || !text) return res.status(400).send("❌ Payload inválido");
 
-    // 🔗 Mandar a Retell
+    // Enviar a Retell AI
     const retellResp = await axios.post(
       "https://api.retellai.com/v2/messages",
       { agent_id: RETELL_AGENT_ID, message: text },
@@ -53,10 +48,9 @@ app.post("/webhook", async (req, res) => {
 
     const reply = retellResp.data?.reply || "⚠️ Sin respuesta";
 
-    // 🔗 Enviar respuesta a Evolution
-    const evoUrl = `${EVO_URL}/message/sendText/${EVO_INSTANCE}`;
+    // Enviar respuesta a Evolution
     await axios.post(
-      evoUrl,
+      `${EVO_URL}/message/sendText/${EVO_INSTANCE}`,
       { number: from.split("@")[0], textMessage: { text: reply } },
       { headers: { apikey: EVO_API_KEY, "Content-Type": "application/json" } }
     );
@@ -68,7 +62,7 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ✅ Custom Function Retell: enviar PDF del menú
+// Custom Function Retell para enviar PDF
 app.post("/retell-function/send-menu", async (req, res) => {
   try {
     const { number } = req.body;
@@ -93,6 +87,7 @@ app.post("/retell-function/send-menu", async (req, res) => {
   }
 });
 
-// 🚀 Iniciar servidor
+// Iniciar servidor
 app.listen(PORT, () => console.log(`✅ Servidor escuchando en puerto ${PORT}`));
+
 

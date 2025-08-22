@@ -17,9 +17,12 @@ app.post('/webhook', async (req, res) => {
 
         console.log(`[${senderNumber}] dice: "${messageText}"`);
 
+        const url = `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`;
+        console.log('URL que se va a llamar:', url);
+
         // Enviar mensaje de vuelta
         await axios.post(
-            `${process.env.EVOLUTION_API_URL}/message/sendText/${process.env.EVOLUTION_INSTANCE}`,
+            url,
             {
                 number: senderNumber,
                 text: `Recibido: ${messageText}`

@@ -6,20 +6,23 @@ const PORT = process.env.PORT || 8080;
 
 app.use(express.json());
 
-// Health check para Railway
+// Health check OBLIGATORIO para Railway
 app.get('/', (req, res) => {
-    res.status(200).json({ status: 'OK', message: 'Bot running' });
+    res.status(200).json({ status: 'OK', message: 'Bot is alive!' });
 });
 
 // Webhook principal
 app.post('/webhook', async (req, res) => {
     try {
+        console.log('-> Webhook principal [/webhook] recibido!');
+        
         const messageData = req.body;
         const senderNumber = messageData.key.remoteJid;
         const messageText = messageData.message.conversation || 
                            messageData.message.extendedTextMessage?.text || '';
 
-        console.log(`Message from ${senderNumber}: ${messageText}`);
+        console.log(`[${senderNumber}] dice: "${messageText}"`);
+        console.log(`[${senderNumber}] 💬 Enviando mensaje a Retell AI...`);
 
         // Enviar a Retell con dynamic_variables
         const retellData = {
@@ -30,18 +33,20 @@ app.post('/webhook', async (req, res) => {
         };
 
         const retellResponse = await axios.post(
-            `https://api.retellai.com/v2/conversation/${process.env.RETELL_CONVERSATION_ID}/message`,
+            `https://api.retellai.com/v2/agent/${process.env.RETELL_AGENT_ID}/chat`,
             retellData,
             {
                 headers: {
                     'Authorization': `Bearer ${process.env.RETELL_API_KEY}`,
                     'Content-Type': 'application/json'
                 },
-                timeout: 8000
+                timeout: 10000
             }
         );
 
-        // Enviar respuesta de vuelta
+        console.log(`🤖 Retell AI responde (texto): "${retellResponse.data.response}"`);
+
+        // Enviar respuesta de vuelta por WhatsApp
         if (retellResponse.data && retellResponse.data.response) {
             await sendWhatsAppMessage(senderNumber, retellResponse.data.response);
         }
@@ -49,21 +54,24 @@ app.post('/webhook', async (req, res) => {
         res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error('Webhook error:', error.message);
-        res.status(500).json({ error: 'Error' });
+        console.error(`!!! ERROR en el webhook [/webhook]:`, error.response?.data || error.message);
+        res.status(200).json({ error: 'Error procesando webhook' });
     }
 });
 
 // Custom Function endpoint para enviar PDF
 app.post('/send-menu', async (req, res) => {
     try {
-        console.log('Send menu called:', req.body);
+        console.log('-> Endpoint [/send-menu] llamado:', req.body);
         
         const { user_phone_number } = req.body;
         
         if (!user_phone_number) {
+            console.error('!!! ERROR: Falta user_phone_number');
             return res.status(400).json({ error: 'Missing user_phone_number' });
         }
+
+        console.log(`📄 Enviando PDF a: ${user_phone_number}`);
 
         // Enviar PDF usando Evolution API
         const pdfData = {
@@ -83,17 +91,16 @@ app.post('/send-menu', async (req, res) => {
                     'Content-Type': 'application/json',
                     'apikey': process.env.EVOLUTION_API_KEY
                 },
-                timeout: 10000
+                timeout: 15000
             }
         );
 
-        console.log('PDF sent:', evolutionResponse.data);
+        console.log('✅ PDF enviado correctamente:', evolutionResponse.data);
         
-        // CRÍTICO: Retell necesita status 200 y JSON response
         res.status(200).json({ success: true });
 
     } catch (error) {
-        console.error('Error sending PDF:', error.message);
+        console.error('!!! ERROR enviando PDF:', error.response?.data || error.message);
         res.status(200).json({ success: false, error: error.message });
     }
 });
@@ -114,26 +121,30 @@ async function sendWhatsAppMessage(phoneNumber, message) {
                     'Content-Type': 'application/json',
                     'apikey': process.env.EVOLUTION_API_KEY
                 },
-                timeout: 8000
+                timeout: 10000
             }
         );
 
+        console.log('✅ Mensaje de WhatsApp enviado');
         return response.data;
+
     } catch (error) {
-        console.error('Error sending WhatsApp message:', error.message);
+        console.error('!!! ERROR enviando mensaje WhatsApp:', error.response?.data || error.message);
         throw error;
     }
 }
 
-// Manejo de SIGTERM para Railway
+// Manejo graceful de SIGTERM
 process.on('SIGTERM', () => {
-    console.log('SIGTERM received, shutting down gracefully');
+    console.log('SIGTERM recibido, cerrando servidor...');
     server.close(() => {
+        console.log('Servidor cerrado correctamente');
         process.exit(0);
     });
 });
 
-// CRÍTICO: Binding a 0.0.0.0 para Railway
+// Iniciar servidor - BINDING CRÍTICO para Railway
 const server = app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on port ${PORT}`);
+    console.log(`🚀 SERVIDOR INICIADO`);
+    console.log(`✅ Servidor escuchando en el puerto ${PORT}. Vinculado a 0.0.0.0 para Railway.`);
 });

@@ -1,6 +1,5 @@
 const express = require('express');
 const axios = require('axios');
-require('dotenv').config();
 
 const app = express();
 const PORT = process.env.PORT || 8080;
@@ -22,17 +21,16 @@ app.post('/webhook', async (req, res) => {
 
         console.log(`Message from ${senderNumber}: ${messageText}`);
 
-        // Enviar a Retell usando Agent ID
+        // Enviar a Retell con dynamic_variables
         const retellData = {
-            agent_id: process.env.RETELL_AGENT_ID,
-            user_message: messageText,
-            metadata: {
+            user_input: messageText,
+            dynamic_variables: {
                 user_phone_number: senderNumber
             }
         };
 
         const retellResponse = await axios.post(
-            'https://api.retellai.com/v2/chat/start-conversation',
+            `https://api.retellai.com/v2/conversation/${process.env.RETELL_CONVERSATION_ID}/message`,
             retellData,
             {
                 headers: {

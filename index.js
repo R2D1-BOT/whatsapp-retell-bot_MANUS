@@ -4,7 +4,13 @@ const app = express();
 
 app.use(express.json());
 
+// Tu API Key de Evolution API
 const EVOLUTION_API_KEY = process.env.EVO_API_KEY;
+
+if (!EVOLUTION_API_KEY) {
+  console.error("❌ FALTA la variable de entorno EVO_API_KEY");
+  process.exit(1);
+}
 
 // Endpoint POST /send-menu
 app.post('/send-menu', async (req, res) => {
@@ -15,7 +21,7 @@ app.post('/send-menu', async (req, res) => {
       return res.status(400).json({ success: false, message: "Falta user_number" });
     }
 
-    // Payload para enviar el PDF
+    // Payload Evolution API
     const evoPayload = {
       number: user_number,
       mediatype: "document",
@@ -42,5 +48,11 @@ app.post('/send-menu', async (req, res) => {
   }
 });
 
+// Puerto Railway
 const PORT = process.env.PORT || 8080;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+
+// Mantener alive el contenedor para evitar SIGTERM
+app.listen(PORT, () => {
+  console.log(`Server running on port ${PORT}`);
+  setInterval(() => console.log("Container alive"), 30000);
+});

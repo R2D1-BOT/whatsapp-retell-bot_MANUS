@@ -1,38 +1,40 @@
-// index.js
 const express = require('express');
 const axios = require('axios');
 const app = express();
 
 app.use(express.json());
 
-// 🔥 Endpoint /send-menu que activa el envío del PDF
+const EVOLUTION_API_KEY = process.env.EVO_API_KEY || "TU_API_KEY";
+
+// Endpoint POST /send-menu
 app.post('/send-menu', async (req, res) => {
   try {
-    // Aquí recibes el contexto del usuario desde tu bot
-    const { args, user_number } = req.body; // user_number se puede extraer de tu sistema
+    // Aquí extraes el número desde el contexto del bot
+    const { user_number } = req.body;
 
-    // Ejemplo de payload para Evolution API
+    if (!user_number) {
+      return res.status(400).json({ success: false, message: "Falta user_number en el body" });
+    }
+
     const evoPayload = {
-      number: user_number, // número de WhatsApp del usuario
+      number: user_number,
       mediatype: "document",
       mimetype: "application/pdf",
-      url: "https://ruta-a-tu-pdf.com/menu.pdf", // reemplaza con la URL real del PDF
+      url: "https://ruta-a-tu-pdf.com/menu.pdf",
       caption: "¡Aquí tienes nuestro menú!"
     };
 
-    // POST a Evolution API
     await axios.post(
       "https://api.evoapicloud.com/message/sendMedia/f45cf2e8-1808-4379-a61c-88acd8e0625f",
       evoPayload,
       {
         headers: {
           "Content-Type": "application/json",
-          "Authorization": "Bearer TU_API_KEY" // reemplaza con tu API Key
+          "Authorization": `Bearer ${EVOLUTION_API_KEY}`
         }
       }
     );
 
-    // Respuesta al bot
     res.json({ success: true, message: "Menú enviado correctamente" });
   } catch (error) {
     console.error("Error enviando menú:", error);

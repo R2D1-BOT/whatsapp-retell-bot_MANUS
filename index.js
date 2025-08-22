@@ -4,17 +4,13 @@ const app = express();
 
 app.use(express.json());
 
-const EVOLUTION_API_KEY = process.env.EVO_API_KEY || "TU_API_KEY";
+const EVOLUTION_API_KEY = process.env.EVO_API_KEY;
 
-// Endpoint POST /send-menu
 app.post('/send-menu', async (req, res) => {
   try {
-    // Aquí extraes el número desde el contexto del bot
     const { user_number } = req.body;
 
-    if (!user_number) {
-      return res.status(400).json({ success: false, message: "Falta user_number en el body" });
-    }
+    if (!user_number) return res.status(400).json({ success: false, message: "Falta user_number" });
 
     const evoPayload = {
       number: user_number,
@@ -27,17 +23,12 @@ app.post('/send-menu', async (req, res) => {
     await axios.post(
       "https://api.evoapicloud.com/message/sendMedia/f45cf2e8-1808-4379-a61c-88acd8e0625f",
       evoPayload,
-      {
-        headers: {
-          "Content-Type": "application/json",
-          "Authorization": `Bearer ${EVOLUTION_API_KEY}`
-        }
-      }
+      { headers: { "Authorization": `Bearer ${EVOLUTION_API_KEY}`, "Content-Type": "application/json" } }
     );
 
     res.json({ success: true, message: "Menú enviado correctamente" });
   } catch (error) {
-    console.error("Error enviando menú:", error);
+    console.error(error);
     res.status(500).json({ success: false, message: "Error enviando menú", error: error.message });
   }
 });

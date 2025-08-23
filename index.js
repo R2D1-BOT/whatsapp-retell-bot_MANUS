@@ -1,54 +1,83 @@
-/console.log('PORT:', process.env.PORT);
-console.log('EVO_API_KEY:', process.env.EVOLUTION_API_KEY ? 'OK' : 'MISSING');
-console.log('EVO_URL:', process.env.EVOLUTION_API_URL);
-console.log('EVO_INSTANCE:', process.env.EVOLUTION_INSTANCE);
-console.log('RETELL_AGENT_ID:', process.env.RETELL_AGENT_ID);
-console.log('RETELL_API_KEY:', process.env.RETELL_API_KEY ? 'OK' : 'MISSING');
-/ index.js
+// index.js
 const express = require('express');
 const axios = require('axios');
 
 const app = express();
 app.use(express.json());
 
-// 🔹 Variables de entorno
+// -------------------
+// Configuración segura
+// -------------------
 const PORT = process.env.PORT || 8080;
-
 const EVO_API_KEY = process.env.EVOLUTION_API_KEY;
-const EVO_URL = process.env.EVOLUTION_API_URL;
+const EVO_API_URL = process.env.EVOLUTION_API_URL;
 const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE;
-
 const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
 
-// 🔹 Healthcheck básico
-app.get('/health', (req, res) => res.send('OK'));
+// -------------------
+// Debug de variables
+// -------------------
+console.log('--- VARIABLES DE ENTORNO ---');
+console.log('PORT:', PORT);
+console.log('EVOLUTION_API_KEY:', EVO_API_KEY ? 'OK' : 'MISSING');
+console.log('EVOLUTION_API_URL:', EVO_API_URL ? 'OK' : 'MISSING');
+console.log('EVOLUTION_INSTANCE:', EVO_INSTANCE ? 'OK' : 'MISSING');
+console.log('RETELL_AGENT_ID:', RETELL_AGENT_ID ? 'OK' : 'MISSING');
+console.log('RETELL_API_KEY:', RETELL_API_KEY ? 'OK' : 'MISSING');
+console.log('----------------------------');
 
-// 🔹 Endpoint para recibir mensajes de WhatsApp (simulado)
-app.post('/webhook', async (req, res) => {
+// -------------------
+// Función para enviar mensaje
+// -------------------
+async function sendTextToEvo(number, text) {
+    if (!EVO_API_URL || !EVO_INSTANCE || !EVO_API_KEY) {
+        console.error('❌ ERROR: EVOLUTION variables faltantes');
+        return { status: 'error', message: 'EVOLUTION variables missing' };
+    }
+
+    const url = `${EVO_API_URL}/message/sendText/${EVO_INSTANCE}`;
+
     try {
-        const { number, message } = req.body;
-
-        // Construir URL EvoAPI correctamente
-        const evoUrl = `${EVO_URL}/message/sendText/${EVO_INSTANCE}`;
-
-        const response = await axios.post(evoUrl, {
+        const res = await axios.post(url, {
             number,
-            message
+            text
         }, {
-            headers: { 'Authorization': `Bearer ${EVO_API_KEY}` }
+            headers: {
+                'Authorization': `Bearer ${EVO_API_KEY}`,
+                'Content-Type': 'application/json'
+            }
         });
 
-        res.json({ status: 'success', data: response.data });
+        return res.data;
     } catch (err) {
-        console.error('Error webhook:', err.response?.data || err.message);
-        res.status(500).json({ status: 'error', message: err.message });
+        console.error('❌ Error webhook:', err.response ? err.response.data : err.message);
+        return { status: 'error', message: err.message };
     }
+}
+
+// -------------------
+// Endpoints de prueba
+// -------------------
+app.get('/health', (req, res) => {
+    res.send({ status: 'ok' });
 });
 
-// 🔹 Arrancar servidor
+app.post('/send', async (req, res) => {
+    const { number, text } = req.body;
+    if (!number || !text) {
+        return res.status(400).send({ status: 'error', message: 'Missing number or text' });
+    }
+    const result = await sendTextToEvo(number, text);
+    res.send(result);
+});
+
+// -------------------
+// Arrancar servidor
+// -------------------
 app.listen(PORT, () => {
     console.log(`🚀 Bot corriendo en puerto ${PORT}`);
 });
+
 
 

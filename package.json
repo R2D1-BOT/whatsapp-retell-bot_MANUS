@@ -1,7 +1,6 @@
 {
   "name": "whatsapp-retell-bot",
   "version": "1.0.0",
-  "description": "Bot de WhatsApp con Retell AI y envío de PDFs vía WebSocket",
   "main": "index.js",
   "scripts": {
     "start": "node index.js"
@@ -10,10 +9,9 @@
     "axios": "^1.7.2",
     "express": "^4.19.2",
     "ws": "^8.13.0"
-  },
-  "author": "",
-  "license": "ISC"
+  }
 }
+
 
 
 

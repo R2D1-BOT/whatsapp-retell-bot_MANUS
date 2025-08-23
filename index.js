@@ -1,68 +1,63 @@
-const express = require('express');
-const axios = require('axios');
+const express = require("express");
+const bodyParser = require("body-parser");
 
 const app = express();
-app.use(express.json());
+app.use(bodyParser.json());
 
 const PORT = process.env.PORT || 8080;
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
-const RETELL_API_KEY = process.env.RETELL_API_KEY;
 
-// Almacena sesiones activas con chat_id
-const chatSessions = {};
+// 🗂️ Aquí vamos a guardar temporalmente los chat_id asociados a cada usuario
+// clave = userIdentifier (lo que te pase Retell), valor = chatId de Evolution
+const sessions = {};
 
-// ==================== ENDPOINT PRIMERA CUSTOM FUNCTION ====================
-app.post('/get-chat-id', async (req, res) => {
-    try {
-        const userIdentifier = req.body.args?.userIdentifier; // Retell puede enviar algo único del usuario
+// 📩 Endpoint para recibir webhooks de EvolutionAPI y guardar chat_id
+app.post("/webhook", async (req, res) => {
+  try {
+    const data = req.body;
 
-        if (!userIdentifier) {
-            return res.status(400).json({ error: 'Falta userIdentifier en args' });
-        }
+    // ⚡ Extrae el chatId y el número de usuario
+    const chatId = data?.key?.remoteJid;
+    const userIdentifier = data?.messages?.[0]?.key?.participant || data?.messages?.[0]?.key?.fromMe;
 
-        // Verificar si ya existe chat_id
-        let chatId = chatSessions[userIdentifier];
-        if (!chatId) {
-            // Crear chat en Retell AI
-            const response = await axios.post(
-                'https://api.retellai.com/create-chat',
-                { agent_id: RETELL_AGENT_ID },
-                { headers: { 
-                    'Authorization': `Bearer ${RETELL_API_KEY}`, 
-                    'Content-Type': 'application/json' 
-                }}
-            );
-
-            chatId = response.data.chat_id;
-            chatSessions[userIdentifier] = chatId;
-        }
-
-        return res.status(200).json({
-            status: 'success',
-            chat_id: chatId
-        });
-
-    } catch (error) {
-        console.error('Error en get-chat-id:', error.response?.data || error.message);
-        return res.status(500).json({
-            status: 'error',
-            message: error.response?.data || error.message
-        });
+    if (chatId && userIdentifier) {
+      sessions[userIdentifier] = chatId;
+      console.log("✅ Guardado en sesiones:", userIdentifier, "->", chatId);
     }
+
+    res.sendStatus(200);
+  } catch (error) {
+    console.error("❌ Error en webhook:", error);
+    res.sendStatus(500);
+  }
 });
 
-// ==================== HEALTHCHECK ====================
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
-        sessions: Object.keys(chatSessions).length,
-        timestamp: new Date().toISOString()
+// 📌 Endpoint GET que usa Retell como Custom Function para obtener el chat_id
+app.get("/get-chat-id", async (req, res) => {
+  try {
+    const { userIdentifier } = req.query;
+
+    if (!userIdentifier) {
+      return res.status(400).json({ status: "error", message: "Falta userIdentifier" });
+    }
+
+    const chatId = sessions[userIdentifier];
+
+    if (!chatId) {
+      return res.status(404).json({ status: "error", message: "No se encontró chat_id para ese userIdentifier" });
+    }
+
+    return res.json({
+      status: "success",
+      chat_id: chatId,
     });
+  } catch (error) {
+    console.error("❌ Error en /get-chat-id:", error);
+    return res.status(500).json({ status: "error", message: "Error interno del servidor" });
+  }
 });
 
-// ==================== INICIAR SERVIDOR ====================
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`Servidor corriendo en puerto ${PORT}`);
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
 
 

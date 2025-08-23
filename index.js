@@ -1,4 +1,10 @@
-// index.js
+/console.log('PORT:', process.env.PORT);
+console.log('EVO_API_KEY:', process.env.EVOLUTION_API_KEY ? 'OK' : 'MISSING');
+console.log('EVO_URL:', process.env.EVOLUTION_API_URL);
+console.log('EVO_INSTANCE:', process.env.EVOLUTION_INSTANCE);
+console.log('RETELL_AGENT_ID:', process.env.RETELL_AGENT_ID);
+console.log('RETELL_API_KEY:', process.env.RETELL_API_KEY ? 'OK' : 'MISSING');
+/ index.js
 const express = require('express');
 const axios = require('axios');
 

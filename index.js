@@ -7,7 +7,7 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // 🔥 VARIABLES DE ENTORNO / CONFIGURACIÓN
-const EVO_API_KEY = process.env.EVO_API_KEY || "bd8e2dda-5..."; // tu key Evolution
+const EVOLUTION_API_KEY= process.env.EVOLUTION_API_KEY || "bd8e2dda-5..."; // tu key Evolution
 const EVO_INSTANCE = process.env.EVO_INSTANCE || "f45cf2e8-1808-4379-a61c-88acd8e0625f";
 const RETELL_API_KEY = process.env.RETELL_API_KEY || "key_98bff7...";
 const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID || "agent_0452f6bca77b7fd955d6316299";
@@ -15,8 +15,10 @@ const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID || "agent_0452f6bca77b7fd955
 // 🔹 Sesiones de chat y timestamps
 const chatSessions = {};
 const sessionTimestamps = {};
-const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 min
-const CLEANUP_INTERVAL = 5 * 60 * 1000;
+
+// 🎯 CONFIGURACIÓN DE INACTIVIDAD
+const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // ⏰ 3 minutos
+const CLEANUP_INTERVAL = 5 * 60 * 1000;   // 🧹 Limpiar cada 5 minutos
 
 // 🔹 Limpieza de sesiones inactivas
 function cleanupInactiveSessions() {
@@ -33,6 +35,7 @@ function cleanupInactiveSessions() {
     if (cleaned > 0) console.log(`🧹 ${cleaned} sesiones inactivas eliminadas`);
 }
 setInterval(cleanupInactiveSessions, CLEANUP_INTERVAL);
+
 
 // ==================== WEBHOOK ====================
 app.post('/webhook', async (req, res) => {
@@ -76,7 +79,7 @@ app.post('/webhook', async (req, res) => {
 
         // 🔹 Enviar respuesta a WhatsApp
         await axios.post(
-            `${EVO_API_URL}/message/sendText/${EVO_INSTANCE}`,
+            `${EVOLUTION_API_URL}/message/sendText/${EVO_INSTANCE}`,
             { number: senderNumber, text: responseMessage },
             { headers: { 'apikey': EVO_API_KEY, 'Content-Type': 'application/json' } }
         );

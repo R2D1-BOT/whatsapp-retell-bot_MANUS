@@ -7,39 +7,33 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// 🔑 Configuración
-const RETELL_API_KEY = process.env.RETELL_API_KEY; // tu API Key de Retell
-const AGENT_ID = process.env.RETELL_AGENT_ID; // ej. "agent_0452f6bca77b7fd955d6316299"
-const EVO_API_KEY = process.env.EVO_API_KEY; // API Key EvolutionAPI
-const EVO_INSTANCE = process.env.EVO_INSTANCE; // ej. f45cf2e8-1808-4379-a61c-88acd8e0625f
-const EVO_URL = "https://api.evoapicloud.com";
+// 🔑 Variables de entorno
+const EVO_API_KEY = process.env.EVO_API_KEY;   // API Evolution
+const RETELL_API_KEY = process.env.RETELL_API_KEY; // API Retell
+const AGENT_ID = process.env.AGENT_ID; // ID del agente Retell
 
-// =========================
-// Endpoint de Webhook
-// =========================
+// ✅ Endpoint principal
+app.get("/", (req, res) => {
+  res.send("✅ Bot WhatsApp ↔ Retell funcionando");
+});
+
+// ✅ Webhook de Evolution API
 app.post("/webhook", async (req, res) => {
   try {
-    const body = req.body;
+    const payload = req.body;
 
-    if (body.event !== "messages.upsert") {
-      console.log("⚠️ Evento no procesado:", body.event);
+    if (!payload?.data?.message?.conversation) {
+      console.warn("⚠️ Mensaje entrante sin conversación:", JSON.stringify(payload));
       return res.sendStatus(200);
     }
 
-    const data = body.data || {};
-    const remoteJid = data.key?.remoteJid; // remitente real
-    const pushName = data.pushName || "Usuario";
-    const text = data.message?.conversation;
+    const from = payload.data.key.remoteJid;
+    const text = payload.data.message.conversation;
 
-    if (!remoteJid || !text) {
-      console.log("⚠️ Payload incompleto:", JSON.stringify(body, null, 2));
-      return res.sendStatus(200);
-    }
+    console.log(`[${from}] dice: "${text}"`);
 
-    console.log(`[${remoteJid}] ${pushName} dice: "${text}"`);
-
-    // 1️⃣ Crear sesión en Retell
-    const sessionResp = await axios.post(
+    // 1️⃣ Mandamos mensaje a Retell
+    const retellResp = await axios.post(
       "https://api.retellai.com/v2/chat/completions",
       {
         agent_id: AGENT_ID,
@@ -53,17 +47,15 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    const reply =
-      sessionResp.data?.choices?.[0]?.message?.content || "Lo siento, no tengo respuesta.";
+    const botReply = retellResp.data?.output_text || "⚠️ No tengo respuesta del agente";
+    console.log(`🤖 Retell responde: "${botReply}"`);
 
-    console.log(`🤖 Respuesta de Retell: ${reply}`);
-
-    // 2️⃣ Enviar respuesta a WhatsApp por EvolutionAPI
+    // 2️⃣ Enviamos respuesta al usuario por Evolution API
     await axios.post(
-      `${EVO_URL}/message/sendText/${EVO_INSTANCE}`,
+      `${payload.server_url}/message/sendText/${payload.instance}`,
       {
-        number: remoteJid.replace("@s.whatsapp.net", ""),
-        text: reply,
+        number: from,
+        text: botReply,
       },
       {
         headers: {
@@ -73,20 +65,19 @@ app.post("/webhook", async (req, res) => {
       }
     );
 
-    console.log(`✅ Respuesta enviada a ${remoteJid}`);
+    console.log(`✅ Respuesta enviada a WhatsApp (${from})`);
     res.sendStatus(200);
-  } catch (err) {
-    console.error("❌ ERROR en el webhook [/webhook]:", err.response?.data || err.message);
+
+  } catch (error) {
+    console.error("❌ ERROR en /webhook:", error.response?.data || error.message);
     res.sendStatus(500);
   }
 });
 
-// =========================
-// Start server
-// =========================
 app.listen(PORT, () => {
-  console.log(`✅ Servidor escuchando en puerto ${PORT}`);
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
+
 
 
 

@@ -11,7 +11,7 @@ const EVOLUTION_API_KEY= process.env.EVOLUTION_API_KEY || "bd8e2dda-5..."; // tu
 const EVO_INSTANCE = process.env.EVO_INSTANCE || "f45cf2e8-1808-4379-a61c-88acd8e0625f";
 const RETELL_API_KEY = process.env.RETELL_API_KEY || "key_98bff7...";
 const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID || "agent_0452f6bca77b7fd955d6316299";
-
+const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL ||"https://api.evoapicloud.com";
 // 🔹 Sesiones de chat y timestamps
 const chatSessions = {};
 const sessionTimestamps = {};

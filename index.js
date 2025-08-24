@@ -1,72 +1,70 @@
-// index.js
 const express = require("express");
-const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// Variables de entorno necesarias
+// ✅ Variables de entorno
 const EVO_API_KEY = process.env.EVO_API_KEY;
-const EVO_INSTANCE = process.env.EVO_INSTANCE; // ejemplo: f45cf2e8-1808-4379-a61c-88acd8e0625f
+const EVO_ID = process.env.EVO_ID;
+const EVO_URL = process.env.EVO_URL;
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // ejemplo: agent_0452f6bca77b7fd955d6316299
 
-// ✅ Webhook que recibe mensajes de Evolution API
+// 🟢 Webhook de EvolutionAPI (entrada de mensajes de WhatsApp)
 app.post("/webhook", async (req, res) => {
   try {
-    const body = req.body;
+    const data = req.body;
+    const from = data.key?.remoteJid; // 📌 <- aquí estaba petando si no venía definido
+    const text = data.message?.conversation;
 
-    console.log("📩 Webhook recibido:", JSON.stringify(body, null, 2));
-
-    // Validar que sea un evento de mensaje entrante
-    if (body.event === "messages.upsert" && body.data) {
-      const remoteJid = body.data.key?.remoteJid;
-      const mensaje =
-        body.data.message?.conversation ||
-        body.data.message?.extendedTextMessage?.text;
-
-      if (!remoteJid || !mensaje) {
-        console.warn("⚠️ Payload sin remoteJid o mensaje válido");
-        return res.sendStatus(200);
-      }
-
-      console.log(`[${remoteJid}] dice: "${mensaje}"`);
-
-      // 🚀 Crear nueva sesión en Retell
-      const retellResp = await fetch("https://api.retellai.com/v2/create-chat", {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${RETELL_API_KEY}`,
-          "Content-Type": "application/json"
-        },
-        body: JSON.stringify({
-          agent_id: RETELL_AGENT_ID,
-          metadata: { remoteJid, mensaje }
-        })
-      });
-
-      const dataRetell = await retellResp.json();
-      console.log("✅ Respuesta Retell:", dataRetell);
-
-      // 🔥 (Opcional) Responder a WhatsApp con un mensaje de confirmación
-      await fetch(
-        `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE}`,
-        {
-          method: "POST",
-          headers: {
-            apikey: EVO_API_KEY,
-            "Content-Type": "application/json"
-          },
-          body: JSON.stringify({
-            number: remoteJid.replace("@s.whatsapp.net", ""),
-            text: "✅ Tu mensaje ha sido recibido, estamos procesando con ClaraBot."
-          })
-        }
-      );
+    if (!from || !text) {
+      console.log("⚠️ Mensaje entrante inválido:", JSON.stringify(data));
+      return res.sendStatus(200);
     }
 
+    console.log(`[${from}] dice: "${text}"`);
+
+    // 🚀 Crear sesión en Retell
+    console.log(`🚀 Creando nueva sesión en Retell para ${from}`);
+
+    const retellResp = await fetch("https://api.retellai.com/v2/chat", {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${RETELL_API_KEY}`,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        agent_id: RETELL_AGENT_ID,
+        user_id: from,
+        message: text,
+      }),
+    });
+
+    if (!retellResp.ok) {
+      const errText = await retellResp.text();
+      console.error("❌ Error creando chat en Retell:", errText);
+      return res.sendStatus(500);
+    }
+
+    const retellData = await retellResp.json();
+    const reply = retellData.reply || "⚠️ El bot no respondió.";
+
+    // 📤 Responder por EvolutionAPI (WhatsApp)
+    await fetch(`${EVO_URL}/message/sendText/${EVO_ID}`, {
+      method: "POST",
+      headers: {
+        apikey: EVO_API_KEY,
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        number: from,
+        text: reply,
+      }),
+    });
+
+    console.log(`✅ Respondido a ${from}: "${reply}"`);
     res.sendStatus(200);
   } catch (err) {
     console.error("!!! ERROR en el webhook [/webhook]:", err);
@@ -74,7 +72,6 @@ app.post("/webhook", async (req, res) => {
   }
 });
 
-// ✅ Arranque del servidor
 app.listen(PORT, () => {
   console.log(`✅ Servidor escuchando en puerto ${PORT}`);
 });

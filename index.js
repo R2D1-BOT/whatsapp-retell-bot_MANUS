@@ -95,7 +95,7 @@ app.post('/webhook', async (req, res) => {
 
         // 🔹 Enviar respuesta a WhatsApp
         await axios.post(
-            `${EVOLUTION_API_URL}/message/sendText/${EVO_INSTANCE}`,
+            `${EVOLUTION_API_URL}/message/sendText/${EVOLUTION_INSTANCE}`,
             { number: senderNumber, text: responseMessage },
             { headers: { 'apikey':EVOLUTION_API_KEY, 'Content-Type': 'application/json' } }
         );

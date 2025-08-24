@@ -1,78 +1,84 @@
+// index.js
 const express = require("express");
-const axios = require("axios");
+const fetch = require("node-fetch");
 
 const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-let lastRecipient = null; // 👉 Guardamos el último remoteJid aquí
+// Variables de entorno necesarias
+const EVO_API_KEY = process.env.EVO_API_KEY;
+const EVO_INSTANCE = process.env.EVO_INSTANCE; // ejemplo: f45cf2e8-1808-4379-a61c-88acd8e0625f
+const RETELL_API_KEY = process.env.RETELL_API_KEY;
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // ejemplo: agent_0452f6bca77b7fd955d6316299
 
-// Healthcheck
-app.get("/health", (req, res) => {
-  res.send("✅ OK");
-});
-
-// Webhook de Evolution
+// ✅ Webhook que recibe mensajes de Evolution API
 app.post("/webhook", async (req, res) => {
   try {
-    const data = req.body;
-    console.log("📩 Webhook recibido:", JSON.stringify(data, null, 2));
+    const body = req.body;
 
-    // Extraer número remoto (chat activo)
-    if (data.key && data.key.remoteJid) {
-      lastRecipient = data.key.remoteJid;
-      console.log("👉 Último destinatario actualizado:", lastRecipient);
+    console.log("📩 Webhook recibido:", JSON.stringify(body, null, 2));
+
+    // Validar que sea un evento de mensaje entrante
+    if (body.event === "messages.upsert" && body.data) {
+      const remoteJid = body.data.key?.remoteJid;
+      const mensaje =
+        body.data.message?.conversation ||
+        body.data.message?.extendedTextMessage?.text;
+
+      if (!remoteJid || !mensaje) {
+        console.warn("⚠️ Payload sin remoteJid o mensaje válido");
+        return res.sendStatus(200);
+      }
+
+      console.log(`[${remoteJid}] dice: "${mensaje}"`);
+
+      // 🚀 Crear nueva sesión en Retell
+      const retellResp = await fetch("https://api.retellai.com/v2/create-chat", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${RETELL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        body: JSON.stringify({
+          agent_id: RETELL_AGENT_ID,
+          metadata: { remoteJid, mensaje }
+        })
+      });
+
+      const dataRetell = await retellResp.json();
+      console.log("✅ Respuesta Retell:", dataRetell);
+
+      // 🔥 (Opcional) Responder a WhatsApp con un mensaje de confirmación
+      await fetch(
+        `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE}`,
+        {
+          method: "POST",
+          headers: {
+            apikey: EVO_API_KEY,
+            "Content-Type": "application/json"
+          },
+          body: JSON.stringify({
+            number: remoteJid.replace("@s.whatsapp.net", ""),
+            text: "✅ Tu mensaje ha sido recibido, estamos procesando con ClaraBot."
+          })
+        }
+      );
     }
 
-    // Aquí tu lógica normal del bot...
     res.sendStatus(200);
   } catch (err) {
-    console.error("❌ Error en webhook:", err.message);
+    console.error("!!! ERROR en el webhook [/webhook]:", err);
     res.sendStatus(500);
   }
 });
 
-// Endpoint para enviar PDF al último chat activo
-app.post("/send-pdf", async (req, res) => {
-  try {
-    const { pdf_url } = req.body;
-
-    if (!lastRecipient) {
-      return res.status(400).json({ ok: false, error: "No hay destinatario activo" });
-    }
-
-    console.log(`📄 Enviando PDF a ${lastRecipient}...`);
-
-    const evoRes = await axios.post(
-      `${process.env.EVOLUTION_API_URL}/message/sendMedia/${process.env.EVOLUTION_INSTANCE}`,
-      {
-        number: lastRecipient, // 👈 se reutiliza el chat activo
-        mediatype: "document",
-        mimetype: "application/pdf",
-        caption: "Aquí tienes la carta 📑",
-        file: pdf_url
-      },
-      {
-        headers: {
-          apikey: process.env.EVO_API_KEY
-        }
-      }
-    );
-
-    console.log("✅ PDF enviado:", evoRes.data);
-    res.json({ ok: true, data: evoRes.data });
-
-  } catch (err) {
-    console.error("❌ Error enviando PDF:", err.response?.data || err.message);
-    res.status(500).json({ ok: false, error: err.message });
-  }
-});
-
-// 🚀 Iniciar servidor
+// ✅ Arranque del servidor
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
+  console.log(`✅ Servidor escuchando en puerto ${PORT}`);
 });
+
 
 
 

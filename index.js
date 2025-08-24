@@ -35,7 +35,7 @@ function cleanupInactiveSessions() {
 setInterval(cleanupInactiveSessions, CLEANUP_INTERVAL);
 
 console.log('🚀 Servidor iniciado');
-console.log('✅ EVO_API_KEY:', EVO_API_KEY.substring(0,10)+'...');
+console.log('✅ EVOLUTION_API_KEY:', EVOLUTION_API_KEY.substring(0,10)+'...');
 console.log('✅ RETELL_API_KEY:', RETELL_API_KEY.substring(0,10)+'...');
 
 // ==================== WEBHOOK ====================
@@ -97,7 +97,7 @@ app.post('/webhook', async (req, res) => {
         await axios.post(
             `${EVO_API_URL}/message/sendText/${EVO_INSTANCE}`,
             { number: senderNumber, text: responseMessage },
-            { headers: { 'apikey': EVO_API_KEY, 'Content-Type': 'application/json' } }
+            { headers: { 'apikey':EVOLUTION_API_KEY, 'Content-Type': 'application/json' } }
         );
 
         console.log(`✅ Mensaje enviado a WhatsApp: "${responseMessage}"`);

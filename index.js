@@ -6,121 +6,124 @@ app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
 
-// 🔥 VARIABLES DE ENTORNO / CONFIGURACIÓN
-const EVOLUTION_API_KEY= process.env.EVOLUTION_API_KEY || "bd8e2dda-5..."; // tu key Evolution
-const EVO_INSTANCE = process.env.EVO_INSTANCE || "f45cf2e8-1808-4379-a61c-88acd8e0625f";
-const RETELL_API_KEY = process.env.RETELL_API_KEY || "key_98bff7...";
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID || "agent_0452f6bca77b7fd955d6316299";
-const EVOLUTION_API_URL = process.env.EVOLUTION_API_URL ||"https://api.evoapicloud.com";
-// 🔹 Sesiones de chat y timestamps
+const EVO_API_KEY = process.env.EVO_API_KEY;
+const EVO_API_URL = process.env.EVOLUTION_API_URL;
+const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE;
+const RETELL_API_KEY = process.env.RETELL_API_KEY;
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
+
+if (!EVO_API_KEY || !EVO_API_URL || !EVO_INSTANCE || !RETELL_API_KEY || !RETELL_AGENT_ID) {
+    console.error('❌ Faltan variables de entorno necesarias');
+    process.exit(1);
+}
+
+// Almacena sesiones y timestamps
 const chatSessions = {};
 const sessionTimestamps = {};
+const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // 3 minutos
+const CLEANUP_INTERVAL = 60 * 1000;      // 1 minuto
 
-// 🎯 CONFIGURACIÓN DE INACTIVIDAD
-const INACTIVITY_TIMEOUT = 3 * 60 * 1000; // ⏰ 3 minutos
-const CLEANUP_INTERVAL = 5 * 60 * 1000;   // 🧹 Limpiar cada 5 minutos
-
-// 🔹 Limpieza de sesiones inactivas
 function cleanupInactiveSessions() {
     const now = Date.now();
-    let cleaned = 0;
-    for (const [sender, timestamp] of Object.entries(sessionTimestamps)) {
-        if (now - timestamp > INACTIVITY_TIMEOUT) {
-            console.log(`🧹 Limpiando sesión inactiva: ${sender}`);
+    for (const [sender, ts] of Object.entries(sessionTimestamps)) {
+        if (now - ts > INACTIVITY_TIMEOUT) {
+            console.log(`🧹 Cerrando sesión inactiva: ${sender}`);
             delete chatSessions[sender];
             delete sessionTimestamps[sender];
-            cleaned++;
         }
     }
-    if (cleaned > 0) console.log(`🧹 ${cleaned} sesiones inactivas eliminadas`);
 }
 setInterval(cleanupInactiveSessions, CLEANUP_INTERVAL);
 
+console.log('🚀 Servidor iniciado con variables de entorno');
+console.log('✅ EVO_API_KEY:', EVO_API_KEY.substring(0,10)+'...');
+console.log('✅ RETELL_API_KEY:', RETELL_API_KEY.substring(0,10)+'...');
 
-// ==================== WEBHOOK ====================
+// ================= WEBHOOK =================
 app.post('/webhook', async (req, res) => {
     try {
         const messageData = req.body.data;
         const eventType = req.body.event;
 
-        if (eventType !== 'messages.upsert' || !messageData) return res.status(200).send('OK');
+        if (eventType !== 'messages.upsert' || !messageData) return res.sendStatus(200);
 
-        const senderNumber = messageData.key?.remoteJid;
-        const messageContent = messageData.message?.conversation ||
-                               messageData.message?.extendedTextMessage?.text;
+        const sender = messageData.key?.remoteJid;
+        const text = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text;
+        if (!sender || !text) return res.sendStatus(200);
 
-        if (!senderNumber || !messageContent) return res.status(200).send('OK');
+        sessionTimestamps[sender] = Date.now();
+        console.log(`[${sender}] dice: "${text}"`);
 
-        console.log(`[${senderNumber}] dice: "${messageContent}"`);
-        sessionTimestamps[senderNumber] = Date.now();
+        // 🔹 Detectar palabras clave "menu" o "carta"
+        if (text.toLowerCase().includes('menu') || text.toLowerCase().includes('carta')) {
+            console.log('📄 Solicitar chat ID y enviar PDF...');
+            
+            // 1️⃣ Obtener chat ID de Retell
+            const chatIdResp = await axios.get('https://whatsapp-retell-bot-manus.onrender.com/get-chat-id', {
+                headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' },
+                params: { phone: sender }
+            });
+            const chatId = chatIdResp.data.chat_id;
+            console.log('🆔 Chat ID recibido:', chatId);
 
-        // 🔹 Crear chat en Retell si no existe
-        let chatId = chatSessions[senderNumber];
+            // 2️⃣ Trigger Make/Custom Function que envía PDF
+            // Aquí Make.com hace POST a EvoAPI
+            // Example payload:
+            // {
+            //   "number": chatId,
+            //   "mediatype": "document",
+            //   "mimetype": "application/pdf",
+            //   "media": "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf",
+            //   "fileName": "Carta_La_Rustica.pdf"
+            // }
+            
+            return res.json({ status: 'ok', chat_id: chatId });
+        }
+
+        // 🔹 Conversación normal Retell AI
+        let chatId = chatSessions[sender];
         if (!chatId) {
-            const createChat = await axios.post(
+            const newChat = await axios.post(
                 'https://api.retellai.com/create-chat',
                 { agent_id: RETELL_AGENT_ID },
                 { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' } }
             );
-            chatId = createChat.data.chat_id;
-            chatSessions[senderNumber] = chatId;
-            console.log(`🆕 Nueva sesión Retell: ${chatId}`);
+            chatId = newChat.data.chat_id;
+            chatSessions[sender] = chatId;
         }
 
-        // 🔹 Enviar mensaje a Retell
-        const chatCompletion = await axios.post(
+        const response = await axios.post(
             'https://api.retellai.com/create-chat-completion',
-            { chat_id: chatId, content: messageContent },
+            { chat_id: chatId, content: text },
             { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}`, 'Content-Type': 'application/json' } }
         );
 
-        const messages = chatCompletion.data.messages;
-        const responseMessage = messages[messages.length - 1]?.content || "Sin respuesta del agente";
-
-        // 🔹 Enviar respuesta a WhatsApp
+        const reply = response.data.messages?.[response.data.messages.length -1]?.content || "Sin respuesta";
         await axios.post(
-            `${EVOLUTION_API_URL}/message/sendText/${EVO_INSTANCE}`,
-            { number: senderNumber, text: responseMessage },
+            `${EVO_API_URL}/message/sendText/${EVO_INSTANCE}`,
+            { number: sender, text: reply },
             { headers: { 'apikey': EVO_API_KEY, 'Content-Type': 'application/json' } }
         );
-        console.log(`✅ Mensaje enviado a WhatsApp: "${responseMessage}"`);
 
-        res.status(200).json({ status: 'success', chat_id: chatId, response: responseMessage });
+        console.log(`✅ Mensaje enviado: "${reply}"`);
+        res.sendStatus(200);
+
     } catch (error) {
         console.error('!!! ERROR webhook:', error.response?.data || error.message);
-        res.status(500).json({ status: 'error', message: error.response?.data || error.message });
+        res.status(500).json({ status:'error', message: error.response?.data || error.message });
     }
 });
 
-// ==================== GET CHAT ID (Custom Function para Retell) ====================
-app.get('/get-chat-id', (req, res) => {
-    try {
-        // Retell enviará parámetros si lo necesitas, aquí devolvemos el número del usuario
-        const phone = req.query.phone; // opcional si Retell lo pasa
-        if (!phone) return res.status(400).json({ error: 'Se requiere parámetro phone' });
-
-        console.log(`🔹 GET CHAT ID solicitado para: ${phone}`);
-        res.status(200).json({ chat_id: phone });
-    } catch (err) {
-        console.error('!!! ERROR get-chat-id:', err.message);
-        res.status(500).json({ error: err.message });
-    }
+// ================= HEALTHCHECK =================
+app.get('/health', (req,res)=> {
+    res.json({ status:'OK', timestamp: new Date(), sessions: Object.keys(chatSessions).length });
 });
 
-// ==================== HEALTHCHECK ====================
-app.get('/health', (req, res) => {
-    res.status(200).json({
-        status: 'OK',
-        timestamp: new Date().toISOString(),
-        sessions: { total: Object.keys(chatSessions).length }
-    });
-});
-
-// ==================== START SERVER ====================
-app.listen(PORT, '0.0.0.0', () => {
+// ================= INICIAR SERVIDOR =================
+app.listen(PORT, '0.0.0.0', ()=> {
     console.log(`🚀 Servidor corriendo en puerto ${PORT}`);
-    console.log(`🔗 Health check: http://localhost:${PORT}/health`);
 });
+
 
 
 

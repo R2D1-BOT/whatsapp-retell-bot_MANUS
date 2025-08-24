@@ -7,9 +7,9 @@ app.use(express.json());
 const PORT = process.env.PORT || 8080;
 
 // 🔥 VARIABLES HARDCODEADAS - SUSTITUIR POR LAS DE RENDER SI QUIERES
-const EVO_API_KEY = "C25AE83B0559-4EB6-825A-10D9B745FD61";
-const EVO_API_URL = "https://api.evoapicloud.com";
-const EVO_INSTANCE = "f45cf2e8-1808-4379-a61c-88acd8e0625f";
+const EVOLUTION_API_KEY= "bd8e2dda-5ddd-424a-978c-476b562da116";
+const EVOLUTION_API_URL = "https://api.evoapicloud.com";
+const EVOLUTION_INSTANCE = "f45cf2e8-1808-4379-a61c-88acd8e0625f";
 const RETELL_API_KEY = "key_98bff79098c79f41ea2c02327ed2";  
 const RETELL_AGENT_ID = "agent_0452f6bca77b7fd955d6316299";
 

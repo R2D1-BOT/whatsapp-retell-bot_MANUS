@@ -1,4 +1,3 @@
-// index.js
 const express = require('express');
 const axios = require('axios');
 
@@ -6,97 +5,118 @@ const app = express();
 app.use(express.json());
 
 // =======================================================================
-// CONFIG
+// 🔥 VARIABLES DE ENTORNO
 // =======================================================================
+const EVO_API_KEY = process.env.EVO_API_KEY;
+const EVO_URL = process.env.EVOLUTION_API_URL;
+const EVO_INSTANCE_ID = process.env.EVOLUTION_INSTANCE;
 const PORT = process.env.PORT || 8080;
-const EVO_API_KEY = "C25AE83B0559-4EB6-825A-10D9B745FD61";
-const EVO_INSTANCE_ID = "756d5e00-dcf5-4e67-84de-29d71fd279a3";
-const EVO_SEND_TEXT_URL = `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE_ID}`;
-const EVO_SEND_MEDIA_URL = `https://api.evoapicloud.com/message/sendMedia/${EVO_INSTANCE_ID}`;
-const PDF_MENU_URL = "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf";
-const PDF_FILENAME = "Carta_La_Rustica.pdf";
+
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
+const RETELL_API_KEY = process.env.RETELL_API_KEY;
 
 // =======================================================================
-// SESIONES
+// GESTIÓN DE SESIONES SIMPLES
 // =======================================================================
 const chatSessions = {};
-const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 min
+const sessionTimestamps = {};
+const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
+const CLEANUP_INTERVAL = 5 * 60 * 1000;
 
-setInterval(() => {
+function cleanupInactiveSessions() {
     const now = Date.now();
-    for (const number in chatSessions) {
-        if (now - chatSessions[number].lastActive > INACTIVITY_TIMEOUT) {
-            console.log(`⏳ Sesión de ${number} eliminada por inactividad.`);
+    for (const number in sessionTimestamps) {
+        if (now - sessionTimestamps[number] > INACTIVITY_TIMEOUT) {
             delete chatSessions[number];
+            delete sessionTimestamps[number];
+            console.log(`⏳ Sesión de ${number} eliminada por inactividad.`);
         }
     }
-}, 60 * 1000);
+}
+setInterval(cleanupInactiveSessions, CLEANUP_INTERVAL);
+
+console.log('🚀 Servidor iniciado');
 
 // =======================================================================
-// FUNCIONES AUXILIARES
+// FUNCIONES PRINCIPALES
 // =======================================================================
-async function sendText(number, text) {
+async function sendMessageToRetell(senderNumber, messageContent) {
     try {
-        await axios.post(EVO_SEND_TEXT_URL, { number, text }, { headers: { apikey: EVO_API_KEY } });
-        console.log(`[${number}] ✅ Texto enviado: ${text}`);
+        let chatId = chatSessions[senderNumber];
+        if (!chatId) {
+            // Crear nueva sesión
+            const resCreate = await axios.post(
+                `https://api.retellai.com/v1/agents/${RETELL_AGENT_ID}/create-chat`,
+                {},
+                { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}` } }
+            );
+            chatId = resCreate.data.chat_id;
+            chatSessions[senderNumber] = chatId;
+            console.log(`🚀 Nueva sesión en Retell para ${senderNumber}`);
+        }
+
+        // Enviar mensaje a Retell
+        const resChat = await axios.post(
+            `https://api.retellai.com/v1/chats/${chatId}/completions`,
+            { content: messageContent },
+            { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}` } }
+        );
+
+        const lastMessage = resChat.data.messages?.slice(-1)[0]?.content;
+        if (lastMessage) {
+            console.log(`[${senderNumber}] 🤖 Retell responde: "${lastMessage}"`);
+            // Enviar texto al usuario por Evo
+            await axios.post(
+                `${EVO_URL}/message/sendText/${EVO_INSTANCE_ID}`,
+                { number: senderNumber, text: lastMessage },
+                { headers: { 'apikey': EVO_API_KEY } }
+            );
+        }
+
     } catch (err) {
-        console.error(`[${number}] ❌ Error enviando texto:`, err.response?.data || err.message);
+        console.error('❌ Error en sendMessageToRetell:', err.response?.data || err.message);
     }
 }
 
-async function sendPDF(number) {
-    try {
-        await axios.post(EVO_SEND_MEDIA_URL, {
-            number,
-            media: { url: PDF_MENU_URL, mimetype: "application/pdf", filename: PDF_FILENAME },
-            text: "¡Aquí tienes nuestra carta!"
-        }, { headers: { apikey: EVO_API_KEY } });
-        console.log(`[${number}] ✅ PDF enviado`);
-    } catch (err) {
-        console.error(`[${number}] ❌ Error enviando PDF:`, err.response?.data || err.message);
-    }
-}
-
 // =======================================================================
-// RUTA PRINCIPAL - SOLO RECIBE MENSAJES DE EVO API
+// RUTA PRINCIPAL DEL BOT
 // =======================================================================
-app.post('/', async (req, res) => {
-    const { event, data } = req.body;
-    if (!event || !data || !data.key || !data.key.remoteJid) {
-        console.warn("⚠️ Mensaje entrante inválido:", req.body);
-        return res.status(400).send("Invalid payload");
+app.post('/webhook', async (req, res) => {
+    const messageData = req.body.data;
+    const eventType = req.body.event;
+
+    if (eventType !== 'messages.upsert' || !messageData) {
+        console.warn('⚠️ Mensaje entrante inválido:', req.body);
+        return res.status(200).send('OK');
     }
 
-    const number = data.key.remoteJid;
-    const message = data.message?.conversation || "";
+    const senderNumber = messageData.key?.remoteJid;
+    const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text;
 
-    console.log(`[${number}] dice: "${message}"`);
+    if (!senderNumber || !messageContent) return res.status(200).send('OK');
 
-    // Registrar última actividad
-    if (!chatSessions[number]) chatSessions[number] = {};
-    chatSessions[number].lastActive = Date.now();
+    console.log(`[${senderNumber}] dice: "${messageContent}"`);
+    sessionTimestamps[senderNumber] = Date.now();
 
-    // Responder automáticamente al mensaje
-    if (message.toLowerCase().includes("carta")) {
-        await sendPDF(number);
-    } else {
-        await sendText(number, `Recibido: "${message}"`);
-    }
+    await sendMessageToRetell(senderNumber, messageContent);
 
-    res.status(200).send("OK");
+    res.status(200).send('OK');
 });
 
 // =======================================================================
 // HEALTH CHECK
 // =======================================================================
-app.get('/', (req, res) => res.send("Bot is alive!"));
+app.get('/', (req, res) => {
+    res.status(200).send('Bot is alive!');
+});
 
 // =======================================================================
 // INICIAR SERVIDOR
 // =======================================================================
-app.listen(PORT, "0.0.0.0", () => {
-    console.log(`✅ Servidor escuchando en el puerto ${PORT}`);
+app.listen(PORT, '0.0.0.0', () => {
+    console.log(`✅ Servidor escuchando en puerto ${PORT}`);
 });
+
 
 
 

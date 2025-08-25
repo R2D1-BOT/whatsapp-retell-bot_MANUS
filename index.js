@@ -6,48 +6,68 @@ const app = express();
 app.use(express.json());
 
 const PORT = process.env.PORT || 8080;
-const EVO_API_KEY = process.env.EVO_API_KEY; // tu token correcto
+
+// Variables de entorno
+const EVO_API_KEY = process.env.EVO_API_KEY; // tu API key de Evolution
 const EVO_URL = process.env.EVOLUTION_API_URL; // https://api.evoapicloud.com
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // agent_0452f6bca77b7fd955d6316299
+const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE; // ID de tu instancia
+const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // agent_...
+const RETELL_API_KEY = process.env.RETELL_API_KEY; // key_...
 
-app.post('/webhook', async (req, res) => {
-  try {
-    const data = req.body;
-    if (!data?.data?.key?.remoteJid || !data?.data?.message?.conversation) {
-      console.log('⚠️ Mensaje entrante inválido:', JSON.stringify(data));
-      return res.status(400).send('Mensaje inválido');
+// Función para enviar mensaje a Evolution/Retell
+async function sendMessageToRetell(sender, message) {
+    try {
+        const response = await axios.post(
+            `${EVO_URL}/v1/agents/${RETELL_AGENT_ID}/create-chat`,
+            {
+                user_id: sender,
+                message: message
+            },
+            {
+                headers: {
+                    'Authorization': `Bearer ${RETELL_API_KEY}`,
+                    'Content-Type': 'application/json'
+                }
+            }
+        );
+        console.log('✅ Mensaje enviado a Retell:', response.data);
+        return response.data;
+    } catch (error) {
+        console.error('❌ Error enviando mensaje a Evolution:', error.response ? error.response.data : error.message);
     }
+}
 
-    const from = data.data.key.remoteJid;
-    const message = data.data.message.conversation;
+// Endpoint principal para recibir mensajes de WhatsApp
+app.post('/webhook', async (req, res) => {
+    const payload = req.body;
+    console.log('📩 Webhook recibido:', JSON.stringify(payload));
 
-    console.log(`[${from}] dice: "${message}"`);
-
-    // Enviar mensaje a Retell / Evolution
-    const response = await axios.post(
-      `${EVO_URL}/v1/agents/${RETELL_AGENT_ID}/create-chat`,
-      {
-        message: message,
-        user: from
-      },
-      {
-        headers: {
-          'Content-Type': 'application/json',
-          'apikey': EVO_API_KEY
+    try {
+        const messageData = payload.data;
+        if (!messageData || !messageData.key) {
+            console.warn('⚠️ Mensaje entrante inválido:', payload);
+            return res.sendStatus(400);
         }
-      }
-    );
 
-    console.log('✅ Mensaje enviado a Evolution:', response.data);
-    res.sendStatus(200);
-  } catch (err) {
-    console.error('❌ Error enviando mensaje a Evolution:', err.response?.data || err.message);
-    res.sendStatus(500);
-  }
+        const sender = messageData.key.remoteJid;
+        const message = messageData.message.conversation;
+
+        if (sender && message) {
+            await sendMessageToRetell(sender, message);
+            res.sendStatus(200);
+        } else {
+            console.warn('⚠️ No se pudo extraer sender o message:', messageData);
+            res.sendStatus(400);
+        }
+    } catch (err) {
+        console.error('❌ Error en /webhook:', err);
+        res.sendStatus(500);
+    }
 });
 
+// Iniciar servidor
 app.listen(PORT, () => {
-  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
+    console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
 
 

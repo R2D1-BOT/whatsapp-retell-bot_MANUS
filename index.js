@@ -1,120 +1,63 @@
-const express = require('express');
-const axios = require('axios');
+// index.js
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
 
-// =======================================================================
-// 🔥 VARIABLES DE ENTORNO
-// =======================================================================
-const EVO_API_KEY = process.env.EVO_API_KEY;
-const EVO_URL = process.env.EVOLUTION_API_URL;
-const EVO_INSTANCE_ID = process.env.EVOLUTION_INSTANCE;
+// Configuración
 const PORT = process.env.PORT || 8080;
+const EVO_API_KEY = process.env.EVO_API_KEY || "tu_clave";
+const EVO_INSTANCE = process.env.EVO_INSTANCE || "f45cf2e8-1808-4379-a61c-88acd8e0625f";
+const EVO_URL = process.env.EVO_URL || "https://api.evoapicloud.com";
 
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID;
-const RETELL_API_KEY = process.env.RETELL_API_KEY;
+// Webhook para recibir mensajes de WhatsApp
+app.post("/webhook", async (req, res) => {
+  try {
+    const data = req.body;
+    console.log("📩 Webhook recibido:", JSON.stringify(data, null, 2));
 
-// =======================================================================
-// GESTIÓN DE SESIONES SIMPLES
-// =======================================================================
-const chatSessions = {};
-const sessionTimestamps = {};
-const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 minutos
-const CLEANUP_INTERVAL = 5 * 60 * 1000;
+    // Verificar si hay mensaje de conversación
+    const message = data?.data?.message?.conversation;
+    const number = data?.data?.key?.remoteJid;
 
-function cleanupInactiveSessions() {
-    const now = Date.now();
-    for (const number in sessionTimestamps) {
-        if (now - sessionTimestamps[number] > INACTIVITY_TIMEOUT) {
-            delete chatSessions[number];
-            delete sessionTimestamps[number];
-            console.log(`⏳ Sesión de ${number} eliminada por inactividad.`);
-        }
-    }
-}
-setInterval(cleanupInactiveSessions, CLEANUP_INTERVAL);
-
-console.log('🚀 Servidor iniciado');
-
-// =======================================================================
-// FUNCIONES PRINCIPALES
-// =======================================================================
-async function sendMessageToRetell(senderNumber, messageContent) {
-    try {
-        let chatId = chatSessions[senderNumber];
-        if (!chatId) {
-            // Crear nueva sesión
-            const resCreate = await axios.post(
-                `https://api.retellai.com/v1/agents/${RETELL_AGENT_ID}/create-chat`,
-                {},
-                { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}` } }
-            );
-            chatId = resCreate.data.chat_id;
-            chatSessions[senderNumber] = chatId;
-            console.log(`🚀 Nueva sesión en Retell para ${senderNumber}`);
-        }
-
-        // Enviar mensaje a Retell
-        const resChat = await axios.post(
-            `https://api.retellai.com/v1/chats/${chatId}/completions`,
-            { content: messageContent },
-            { headers: { 'Authorization': `Bearer ${RETELL_API_KEY}` } }
-        );
-
-        const lastMessage = resChat.data.messages?.slice(-1)[0]?.content;
-        if (lastMessage) {
-            console.log(`[${senderNumber}] 🤖 Retell responde: "${lastMessage}"`);
-            // Enviar texto al usuario por Evo
-            await axios.post(
-                `${EVO_URL}/message/sendText/${EVO_INSTANCE_ID}`,
-                { number: senderNumber, text: lastMessage },
-                { headers: { 'apikey': EVO_API_KEY } }
-            );
-        }
-
-    } catch (err) {
-        console.error('❌ Error en sendMessageToRetell:', err.response?.data || err.message);
-    }
-}
-
-// =======================================================================
-// RUTA PRINCIPAL DEL BOT
-// =======================================================================
-app.post('/webhook', async (req, res) => {
-    const messageData = req.body.data;
-    const eventType = req.body.event;
-
-    if (eventType !== 'messages.upsert' || !messageData) {
-        console.warn('⚠️ Mensaje entrante inválido:', req.body);
-        return res.status(200).send('OK');
+    if (message && number) {
+      // Enviar mensaje a Evolution
+      await sendToEvolution(message, number);
     }
 
-    const senderNumber = messageData.key?.remoteJid;
-    const messageContent = messageData.message?.conversation || messageData.message?.extendedTextMessage?.text;
-
-    if (!senderNumber || !messageContent) return res.status(200).send('OK');
-
-    console.log(`[${senderNumber}] dice: "${messageContent}"`);
-    sessionTimestamps[senderNumber] = Date.now();
-
-    await sendMessageToRetell(senderNumber, messageContent);
-
-    res.status(200).send('OK');
+    res.status(200).send("OK");
+  } catch (err) {
+    console.error("❌ Error en /webhook:", err.message || err);
+    res.status(500).send("Error");
+  }
 });
 
-// =======================================================================
-// HEALTH CHECK
-// =======================================================================
-app.get('/', (req, res) => {
-    res.status(200).send('Bot is alive!');
-});
+// Función para enviar mensaje a Evolution API
+async function sendToEvolution(message, number) {
+  try {
+    const response = await axios.post(
+      `${EVO_URL}/message/sendText/${EVO_INSTANCE}`,
+      {
+        number: number,
+        text: message,
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${EVO_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+      }
+    );
+    console.log("✅ Mensaje enviado a Evolution:", response.data);
+  } catch (err) {
+    console.error("❌ Error enviando mensaje a Evolution:", err.response?.data || err.message);
+  }
+}
 
-// =======================================================================
-// INICIAR SERVIDOR
-// =======================================================================
-app.listen(PORT, '0.0.0.0', () => {
-    console.log(`✅ Servidor escuchando en puerto ${PORT}`);
+// Servidor
+app.listen(PORT, () => {
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
 
 

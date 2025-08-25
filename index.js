@@ -1,74 +1,69 @@
 // index.js
-const express = require('express');
-const axios = require('axios');
+const express = require("express");
+const axios = require("axios");
 
 const app = express();
 app.use(express.json());
 
+// ------------------ VARIABLES ------------------
+const EVO_API_KEY = "bd8e2dda-5ddd-424a-978c-476b562da116";
+const EVOLUTION_API_URL = "https://api.evoapicloud.com";
+const EVOLUTION_INSTANCE = "f45cf2e8-1808-4379-a61c-88acd8e0625f";
 const PORT = process.env.PORT || 8080;
 
-// Variables de entorno
-const EVO_API_KEY = process.env.EVO_API_KEY; // tu API key de Evolution
-const EVO_URL = process.env.EVOLUTION_API_URL; // https://api.evoapicloud.com
-const EVO_INSTANCE = process.env.EVOLUTION_INSTANCE; // ID de tu instancia
-const RETELL_AGENT_ID = process.env.RETELL_AGENT_ID; // agent_...
-const RETELL_API_KEY = process.env.RETELL_API_KEY; // key_...
+const RETELL_AGENT_ID = "agent_0452f6bca77b7fd955d6316299";
+const RETELL_API_KEY = "key_98bff79098c79f41ea2c02327ed2";
+const RETELL_URL = `https://api.retell.ai/v1/agents/${RETELL_AGENT_ID}/create-chat`;
 
-// Función para enviar mensaje a Evolution/Retell
-async function sendMessageToRetell(sender, message) {
-    try {
-        const response = await axios.post(
-            `${EVO_URL}/v1/agents/${RETELL_AGENT_ID}/create-chat`,
-            {
-                user_id: sender,
-                message: message
-            },
-            {
-                headers: {
-                    'Authorization': `Bearer ${RETELL_API_KEY}`,
-                    'Content-Type': 'application/json'
-                }
-            }
-        );
-        console.log('✅ Mensaje enviado a Retell:', response.data);
-        return response.data;
-    } catch (error) {
-        console.error('❌ Error enviando mensaje a Evolution:', error.response ? error.response.data : error.message);
-    }
+// ------------------ FUNCIONES ------------------
+async function sendMessageToRetell(message) {
+  try {
+    const response = await axios.post(
+      RETELL_URL,
+      { prompt: message },
+      {
+        headers: {
+          Authorization: `Bearer ${RETELL_API_KEY}`,
+          "Content-Type": "application/json",
+        },
+        timeout: 20000,
+      }
+    );
+    return response.data;
+  } catch (err) {
+    console.error("❌ Error enviando mensaje a Retell:", err.response ? err.response.data : err.message);
+    return null;
+  }
 }
 
-// Endpoint principal para recibir mensajes de WhatsApp
-app.post('/webhook', async (req, res) => {
-    const payload = req.body;
-    console.log('📩 Webhook recibido:', JSON.stringify(payload));
+// Endpoint para recibir webhooks de EvoAPI
+app.post("/webhook", async (req, res) => {
+  const payload = req.body;
 
-    try {
-        const messageData = payload.data;
-        if (!messageData || !messageData.key) {
-            console.warn('⚠️ Mensaje entrante inválido:', payload);
-            return res.sendStatus(400);
-        }
+  if (!payload?.data?.message) {
+    console.log("⚠️ Mensaje entrante inválido:", payload);
+    return res.sendStatus(400);
+  }
 
-        const sender = messageData.key.remoteJid;
-        const message = messageData.message.conversation;
+  const messageText = payload.data.message.conversation;
+  const sender = payload.data.key.remoteJid;
 
-        if (sender && message) {
-            await sendMessageToRetell(sender, message);
-            res.sendStatus(200);
-        } else {
-            console.warn('⚠️ No se pudo extraer sender o message:', messageData);
-            res.sendStatus(400);
-        }
-    } catch (err) {
-        console.error('❌ Error en /webhook:', err);
-        res.sendStatus(500);
-    }
+  console.log(`[${sender}] dice: "${messageText}"`);
+
+  // Reenviar a Retell
+  const retellResponse = await sendMessageToRetell(messageText);
+  if (retellResponse) {
+    console.log("✅ Retell respondió:", retellResponse);
+  }
+
+  res.sendStatus(200);
 });
 
-// Iniciar servidor
+// ------------------ SERVIDOR ------------------
 app.listen(PORT, () => {
-    console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
+  console.log(`🚀 Servidor escuchando en puerto ${PORT}`);
 });
+
 
 
 

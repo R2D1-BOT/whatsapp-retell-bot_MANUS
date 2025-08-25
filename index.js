@@ -1,73 +1,102 @@
-// index.js - bot simple con timeout 5 min
-const axios = require("axios");
+// index.js
+const express = require('express');
+const axios = require('axios');
 
-// 🔑 Variables
-const EVO_API_KEY = "C25AE83B0559-4EB6-825A-10D9B745FD61"; 
-const RETELL_API_KEY = "key_98bff79098c79f41ea2c02327ed2"; 
-const AGENT_ID = "agent_0452f6bca77b7fd955d6316299"; 
-const EVO_INSTANCE_ID = "f45cf2e8-1808-4379-a61c-88acd8e0625f"; 
+const app = express();
+app.use(express.json());
 
-// Sesiones
+// =======================================================================
+// CONFIG
+// =======================================================================
+const PORT = process.env.PORT || 8080;
+const EVO_API_KEY = "C25AE83B0559-4EB6-825A-10D9B745FD61";
+const EVO_INSTANCE_ID = "756d5e00-dcf5-4e67-84de-29d71fd279a3";
+const EVO_SEND_TEXT_URL = `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE_ID}`;
+const EVO_SEND_MEDIA_URL = `https://api.evoapicloud.com/message/sendMedia/${EVO_INSTANCE_ID}`;
+const PDF_MENU_URL = "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf";
+const PDF_FILENAME = "Carta_La_Rustica.pdf";
+
+// =======================================================================
+// SESIONES
+// =======================================================================
 const chatSessions = {};
-const sessionTimestamps = {};
 const INACTIVITY_TIMEOUT = 5 * 60 * 1000; // 5 min
 
-// Limpiar sesiones inactivas cada 5 min
 setInterval(() => {
-  const now = Date.now();
-  for (const from in sessionTimestamps) {
-    if (now - sessionTimestamps[from] > INACTIVITY_TIMEOUT) {
-      console.log(`⏳ Sesión de ${from} eliminada por inactividad.`);
-      delete chatSessions[from];
-      delete sessionTimestamps[from];
+    const now = Date.now();
+    for (const number in chatSessions) {
+        if (now - chatSessions[number].lastActive > INACTIVITY_TIMEOUT) {
+            console.log(`⏳ Sesión de ${number} eliminada por inactividad.`);
+            delete chatSessions[number];
+        }
     }
-  }
-}, INACTIVITY_TIMEOUT);
+}, 60 * 1000);
 
-async function sendMessageToRetell(from, text) {
-  try {
-    sessionTimestamps[from] = Date.now();
-
-    let chatId = chatSessions[from];
-    if (!chatId) {
-      const createChatResp = await axios.post(
-        "https://api.retellai.com/v1/agents/" + AGENT_ID + "/create-chat",
-        {},
-        { headers: { Authorization: `Bearer ${RETELL_API_KEY}` } }
-      );
-      chatId = createChatResp.data.chat_id;
-      chatSessions[from] = chatId;
-      console.log(`🚀 Nueva sesión creada para ${from}`);
+// =======================================================================
+// FUNCIONES AUXILIARES
+// =======================================================================
+async function sendText(number, text) {
+    try {
+        await axios.post(EVO_SEND_TEXT_URL, { number, text }, { headers: { apikey: EVO_API_KEY } });
+        console.log(`[${number}] ✅ Texto enviado: ${text}`);
+    } catch (err) {
+        console.error(`[${number}] ❌ Error enviando texto:`, err.response?.data || err.message);
     }
-
-    const chatResp = await axios.post(
-      `https://api.retellai.com/v1/agents/${AGENT_ID}/chat-completions`,
-      { chat_id: chatId, messages: [{ role: "user", content: text }] },
-      { headers: { Authorization: `Bearer ${RETELL_API_KEY}` } }
-    );
-
-    const reply = chatResp.data.output_text || "⚠️ Sin respuesta del bot";
-    console.log(`🤖 Respuesta de Retell: ${reply}`);
-
-    await axios.post(
-      `https://api.evoapicloud.com/message/sendText/${EVO_INSTANCE_ID}`,
-      { number: from, text: reply },
-      { headers: { apikey: EVO_API_KEY, "Content-Type": "application/json" } }
-    );
-
-    console.log(`✅ Mensaje enviado a ${from}`);
-
-  } catch (err) {
-    console.error("❌ Error en sendMessageToRetell:", err.response?.data || err.message);
-  }
 }
 
-// Simulación de mensaje
-(async () => {
-  const testNumber = "34625186415@s.whatsapp.net";
-  const testMessage = "Hola, quiero la carta";
-  await sendMessageToRetell(testNumber, testMessage);
-})();
+async function sendPDF(number) {
+    try {
+        await axios.post(EVO_SEND_MEDIA_URL, {
+            number,
+            media: { url: PDF_MENU_URL, mimetype: "application/pdf", filename: PDF_FILENAME },
+            text: "¡Aquí tienes nuestra carta!"
+        }, { headers: { apikey: EVO_API_KEY } });
+        console.log(`[${number}] ✅ PDF enviado`);
+    } catch (err) {
+        console.error(`[${number}] ❌ Error enviando PDF:`, err.response?.data || err.message);
+    }
+}
+
+// =======================================================================
+// RUTA PRINCIPAL - SOLO RECIBE MENSAJES DE EVO API
+// =======================================================================
+app.post('/', async (req, res) => {
+    const { event, data } = req.body;
+    if (!event || !data || !data.key || !data.key.remoteJid) {
+        console.warn("⚠️ Mensaje entrante inválido:", req.body);
+        return res.status(400).send("Invalid payload");
+    }
+
+    const number = data.key.remoteJid;
+    const message = data.message?.conversation || "";
+
+    console.log(`[${number}] dice: "${message}"`);
+
+    // Registrar última actividad
+    if (!chatSessions[number]) chatSessions[number] = {};
+    chatSessions[number].lastActive = Date.now();
+
+    // Responder automáticamente al mensaje
+    if (message.toLowerCase().includes("carta")) {
+        await sendPDF(number);
+    } else {
+        await sendText(number, `Recibido: "${message}"`);
+    }
+
+    res.status(200).send("OK");
+});
+
+// =======================================================================
+// HEALTH CHECK
+// =======================================================================
+app.get('/', (req, res) => res.send("Bot is alive!"));
+
+// =======================================================================
+// INICIAR SERVIDOR
+// =======================================================================
+app.listen(PORT, "0.0.0.0", () => {
+    console.log(`✅ Servidor escuchando en el puerto ${PORT}`);
+});
 
 
 

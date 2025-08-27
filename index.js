@@ -18,7 +18,8 @@ console.log("PORT:", process.env.PORT || "8080");
 // ================================
 const EVO_API_KEY = process.env.EVO_API_KEY;
 const RETELL_API_KEY = process.env.RETELL_API_KEY;
-const RETELL_API_URL = process.env.RETELL_API_URL || "https://api.retell.ai";
+const RETELL_API_URL = process.env.RETELL_API_URL || "https://api.retellai.com";
+
 const PORT = process.env.PORT || 8080;
 
 // ================================

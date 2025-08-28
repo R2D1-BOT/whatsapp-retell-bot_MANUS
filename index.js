@@ -12,9 +12,10 @@ const EVO_API_URL      = process.env.EVO_API_URL;
 const EVO_API_KEY      = process.env.EVO_API_KEY;
 const EVO_INSTANCE_ID  = process.env.EVO_INSTANCE_ID;
 
-// Retell (o la IA que quieras enganchar ahora)
+// Retell AI
 const RETELL_API_URL   = process.env.RETELL_API_URL || "https://api.retellai.com";
 const RETELL_API_KEY   = process.env.RETELL_API_KEY;
+const RETELL_AGENT_ID  = process.env.RETELL_AGENT_ID; // Nuevo: ID del agente
 
 // Activos
 const PDF_MENU_URL     = process.env.PDF_MENU_URL || "https://raw.githubusercontent.com/R2D1-BOT/larustica_carta/main/Carta_La_Rustica_Ace_y_Pb_Junio_24-3.pdf";
@@ -27,6 +28,7 @@ function logEnv() {
   console.log("🔑 EVO_API_KEY:", EVO_API_KEY ? "OK" : "FALTA");
   console.log("🌍 RETELL_API_URL:", RETELL_API_URL);
   console.log("🔑 RETELL_API_KEY:", RETELL_API_KEY ? "OK" : "FALTA");
+  console.log("🤖 RETELL_AGENT_ID:", RETELL_AGENT_ID ? "OK" : "FALTA");
   console.log("📄 PDF_MENU_URL:", PDF_MENU_URL);
 }
 
@@ -79,28 +81,55 @@ async function sendPdfToWhatsApp(number, caption) {
 
 async function askRetell(userText) {
   if (!RETELL_API_KEY) throw new Error("Falta RETELL_API_KEY");
-  const url = `${RETELL_API_URL.replace(/\/$/, "")}/v1/chat/completions`;
+  
+  try {
+    // Crear un chat
+    const createChatRes = await axios.post(
+      `${RETELL_API_URL}/create-chat`,
+      {
+        agent_id: RETELL_AGENT_ID // Si necesitas especificar el agente
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${RETELL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        validateStatus: () => true
+      }
+    );
 
-  const payload = {
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "Eres un asistente de WhatsApp para un restaurante. Responde corto y claro." },
-      { role: "user", content: userText }
-    ]
-  };
+    if (createChatRes.status >= 400) {
+      throw new Error(`Create Chat ${createChatRes.status}: ${JSON.stringify(createChatRes.data)}`);
+    }
 
-  const res = await axios.post(url, payload, {
-    headers: {
-      Authorization: `Bearer ${RETELL_API_KEY}`,
-      "Content-Type": "application/json"
-    },
-    validateStatus: () => true
-  });
+    const chatId = createChatRes.data.chat_id;
+    
+    // Crear completion
+    const completionRes = await axios.post(
+      `${RETELL_API_URL}/create-chat-completion`,
+      {
+        chat_id: chatId,
+        content: userText
+      },
+      {
+        headers: {
+          Authorization: `Bearer ${RETELL_API_KEY}`,
+          "Content-Type": "application/json"
+        },
+        validateStatus: () => true
+      }
+    );
 
-  if (res.status >= 400) {
-    throw new Error(`Retell ${res.status}: ${JSON.stringify(res.data)}`);
+    if (completionRes.status >= 400) {
+      throw new Error(`Chat Completion ${completionRes.status}: ${JSON.stringify(completionRes.data)}`);
+    }
+
+    return completionRes.data?.messages?.[0]?.content || "";
+    
+  } catch (error) {
+    console.error("Error detallado Retell:", error.response?.data || error.message);
+    throw error;
   }
-  return res.data?.choices?.[0]?.message?.content || "";
 }
 
 app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
@@ -144,7 +173,6 @@ app.listen(PORT, () => {
   console.log(`✅ Servidor corriendo en puerto ${PORT}`);
   logEnv();
 });
-
 
 
 

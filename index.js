@@ -137,18 +137,49 @@ app.get("/healthz", (req, res) => res.status(200).json({ ok: true }));
 app.post("/webhook", async (req, res) => {
   try {
     const { from, text } = pickTextFromEvolution(req.body);
-    console.log(`[${from}] dice: "${text}"`);
-
-    if (!from || !text) {
-      console.warn("⚠️ Mensaje vacío, no se procesa");
+    
+    if (!from || !text || from === "undefined" || text === "undefined" || text.trim() === "") {
       return res.sendStatus(200);
     }
 
-    const normalized = (text || "").toLowerCase();
-    if (normalized.includes("carta") || normalized.includes("menú") || normalized.includes("menu")) {
+    // CACHE: Evitar mensajes duplicados
+    const messageId = `${from}-${text}-${Date.now()}`;
+    if (messageCache.has(messageId)) {
+      return res.sendStatus(200);
+    }
+    messageCache.add(messageId);
+    
+    // Limpiar cache viejo (cada 10 mensajes)
+    if (messageCache.size > 10) {
+      messageCache.clear();
+    }
+
+    console.log(`[${from}] dice: "${text}"`);
+
+    const normalized = text.toLowerCase();
+    if (normalized.includes("carta") || normalized.includes("menú") || normalized.includes("menu") || normalized.includes("pdf")) {
       await sendPdfToWhatsApp(from, "Aquí tienes la carta. Dime qué te apetece.");
       return res.sendStatus(200);
     }
+
+    let aiReply = "";
+    try {
+      aiReply = await askRetell(text);
+    } catch (err) {
+      console.error("❌ Error Retell:", err.message);
+      aiReply = "Ahora mismo no puedo consultar el asistente. ¿Te ayudo con algo puntual?";
+    }
+
+    if (!aiReply || typeof aiReply !== "string") {
+      aiReply = "¿Podrías repetirlo? No te he entendido bien.";
+    }
+
+    await sendTextToWhatsApp(from, aiReply);
+  } catch (err) {
+    console.error("❌ Error en /webhook:", err.response?.data || err.message);
+  }
+  res.sendStatus(200);
+});
 
     let aiReply = "";
     try {
